@@ -46,5 +46,8 @@
     "typescript": "~5.9.2",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.4.0"
+  },
+  "dependencies": {
+    "expo-glass-effect": "^55.0.10"
   }
 }
