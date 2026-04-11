@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PermissionSetupPrompt } from "@/components/PermissionSetupPrompt";
 import { useMonitoring } from "@/context/MonitoringContext";
 import { useColors } from "@/hooks/useColors";
 import { analyzeApp } from "@/services/ai";
@@ -138,6 +139,7 @@ export default function DashboardScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <PermissionSetupPrompt />
       <View
         style={[
           styles.header,

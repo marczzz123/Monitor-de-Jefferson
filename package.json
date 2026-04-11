@@ -48,6 +48,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "expo-glass-effect": "^55.0.10"
+    "expo-glass-effect": "^55.0.10",
+    "expo-intent-launcher": "^55.0.12"
   }
 }
