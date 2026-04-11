@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build APK with EAS
     runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_DOMAIN: a43b924a-f0ef-4c28-85d2-21942eebaeb4-00-3vrf51um4ch25.riker.replit.dev
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

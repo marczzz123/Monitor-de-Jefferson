@@ -1,6 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
+import {
+  getInstalledApps,
+  getUsageStats,
+  startMonitoringService,
+  stopMonitoringService,
+  type DeviceAppInfo,
+} from "@/services/deviceApps";
+
 export type AppDecision = "allow" | "warn" | "close";
 
 export interface MonitoredApp {
@@ -34,19 +42,6 @@ export interface Schedule {
   bedtime: number;
 }
 
-const MOCK_APPS: MonitoredApp[] = [
-  { name: "YouTube", packageName: "com.google.android.youtube", category: "distraction", icon: "play-circle" },
-  { name: "TikTok", packageName: "com.zhiliaoapp.musically", category: "distraction", icon: "video" },
-  { name: "Instagram", packageName: "com.instagram.android", category: "distraction", icon: "camera" },
-  { name: "WhatsApp", packageName: "com.whatsapp", category: "neutral", icon: "message-circle" },
-  { name: "Chrome", packageName: "com.android.chrome", category: "neutral", icon: "globe" },
-  { name: "Duolingo", packageName: "com.duolingo", category: "educational", icon: "book-open" },
-  { name: "Khan Academy", packageName: "org.khanacademy.android", category: "educational", icon: "book" },
-  { name: "Free Fire", packageName: "com.dts.freefireth", category: "distraction", icon: "crosshair" },
-  { name: "Roblox", packageName: "com.roblox.client", category: "distraction", icon: "grid" },
-  { name: "Calculadora", packageName: "com.android.calculator2", category: "educational", icon: "hash" },
-];
-
 interface MonitoringContextType {
   isMonitoring: boolean;
   currentApp: MonitoredApp | null;
@@ -62,22 +57,27 @@ interface MonitoringContextType {
   addAction: (action: AIAction) => void;
   getUsageContext: () => Record<string, unknown>;
   allApps: MonitoredApp[];
+  refreshInstalledApps: () => Promise<void>;
 }
 
 const MonitoringContext = createContext<MonitoringContextType | null>(null);
+
+function normalizeApp(app: DeviceAppInfo): MonitoredApp {
+  return {
+    name: app.name,
+    packageName: app.packageName,
+    category: app.category,
+    icon: app.icon || "smartphone",
+  };
+}
 
 export function MonitoringProvider({ children }: { children: React.ReactNode }) {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [currentApp, setCurrentApp] = useState<MonitoredApp | null>(null);
   const [todayUsage, setTodayUsage] = useState<UsageEntry[]>([]);
   const [recentActions, setRecentActions] = useState<AIAction[]>([]);
-  const [restrictedApps, setRestrictedApps] = useState<string[]>([
-    "com.google.android.youtube",
-    "com.zhiliaoapp.musically",
-    "com.dts.freefireth",
-    "com.roblox.client",
-    "com.instagram.android",
-  ]);
+  const [restrictedApps, setRestrictedApps] = useState<string[]>([]);
+  const [allApps, setAllApps] = useState<MonitoredApp[]>([]);
   const [schedule, setSchedule] = useState<Schedule>({
     schoolStart: 8,
     schoolEnd: 14,
@@ -85,19 +85,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   });
   const [sensitivity, setSensitivity] = useState(2);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appsRef = useRef<MonitoredApp[]>([]);
 
   useEffect(() => {
     loadData();
+    refreshInstalledApps();
   }, []);
+
+  useEffect(() => {
+    appsRef.current = allApps;
+  }, [allApps]);
 
   async function loadData() {
     try {
       const stored = await AsyncStorage.getItem("@guardian_data");
       if (stored) {
         const data = JSON.parse(stored);
-        if (data.restrictedApps) setRestrictedApps(data.restrictedApps);
+        if (Array.isArray(data.restrictedApps)) setRestrictedApps(data.restrictedApps);
         if (data.schedule) setSchedule(data.schedule);
-        if (data.sensitivity) setSensitivity(data.sensitivity);
+        if (typeof data.sensitivity === "number") setSensitivity(data.sensitivity);
         if (data.recentActions) setRecentActions(data.recentActions.slice(0, 20));
       }
     } catch {}
@@ -116,37 +122,54 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     } catch {}
   }
 
-  const simulateMonitoring = useCallback(() => {
-    const distractionApps = MOCK_APPS.filter((a) => restrictedApps.includes(a.packageName));
-    const allTargets = distractionApps.length > 0 ? distractionApps : MOCK_APPS;
-    const app = allTargets[Math.floor(Math.random() * allTargets.length)];
-    setCurrentApp(app);
+  const refreshInstalledApps = useCallback(async () => {
+    try {
+      const deviceApps = await getInstalledApps();
+      const normalized = deviceApps.map(normalizeApp);
+      setAllApps(normalized);
+      appsRef.current = normalized;
+    } catch {
+      setAllApps([]);
+      appsRef.current = [];
+    }
+  }, []);
 
-    setTodayUsage((prev) => {
-      const existing = prev.find((u) => u.packageName === app.packageName);
-      if (existing) {
-        return prev.map((u) =>
-          u.packageName === app.packageName ? { ...u, minutes: u.minutes + 1 } : u
-        );
+  const refreshDeviceUsage = useCallback(async () => {
+    try {
+      const usage = await getUsageStats();
+      const appMap = new Map(appsRef.current.map((app) => [app.packageName, app]));
+
+      if (usage.length === 0) {
+        setCurrentApp(null);
+        return;
       }
-      return [
-        ...prev,
-        {
+
+      const entries = usage.map((entry) => {
+        const app = appMap.get(entry.packageName) ?? normalizeApp(entry);
+        return {
           appName: app.name,
           packageName: app.packageName,
-          minutes: 1,
+          minutes: entry.minutes,
           decision: "allow" as AppDecision,
           reason: "",
-          timestamp: Date.now(),
-        },
-      ];
-    });
-  }, [restrictedApps]);
+          timestamp: entry.lastTimeUsed || Date.now(),
+        };
+      });
+
+      const first = usage[0];
+      const firstApp = appMap.get(first.packageName) ?? normalizeApp(first);
+      setTodayUsage(entries);
+      setCurrentApp(firstApp);
+    } catch {
+      setCurrentApp(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (isMonitoring) {
-      simulateMonitoring();
-      intervalRef.current = setInterval(simulateMonitoring, 8000);
+      refreshInstalledApps();
+      refreshDeviceUsage();
+      intervalRef.current = setInterval(refreshDeviceUsage, 8000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
       setCurrentApp(null);
@@ -154,10 +177,18 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isMonitoring, simulateMonitoring]);
+  }, [isMonitoring, refreshDeviceUsage, refreshInstalledApps]);
 
   function toggleMonitoring() {
-    setIsMonitoring((prev) => !prev);
+    setIsMonitoring((prev) => {
+      const next = !prev;
+      if (next) {
+        startMonitoringService().catch(() => {});
+      } else {
+        stopMonitoringService().catch(() => {});
+      }
+      return next;
+    });
   }
 
   function toggleRestrictedApp(packageName: string) {
@@ -188,9 +219,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     });
     setTodayUsage((prev) =>
       prev.map((u) =>
-        u.packageName === action.appName
-          ? { ...u, decision: action.action, reason: action.reason }
-          : u
+        u.appName === action.appName ? { ...u, decision: action.action, reason: action.reason } : u
       )
     );
   }
@@ -205,9 +234,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       hora: `${hour}:${String(now.getMinutes()).padStart(2, "0")}`,
       horario_escolar: isSchoolHours,
       hora_dormir: isNightTime,
+      apps_instaladas_detectadas: allApps.length,
       apps_restringidas: restrictedApps.length,
       uso_hoy: todayUsage.map((u) => ({
         app: u.appName,
+        paquete: u.packageName,
         minutos: u.minutes,
         decision: u.decision,
       })),
@@ -236,7 +267,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         updateSensitivity,
         addAction,
         getUsageContext,
-        allApps: MOCK_APPS,
+        allApps,
+        refreshInstalledApps,
       }}
     >
       {children}

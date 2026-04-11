@@ -2,7 +2,7 @@
   "expo": {
     "name": "Guardian - Control Parental",
     "slug": "control-parental",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "control-parental",
@@ -18,16 +18,18 @@
     },
     "android": {
       "package": "com.guardian.controlparental",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#2D7BFF"
       },
       "permissions": [
+        "android.permission.QUERY_ALL_PACKAGES",
         "android.permission.PACKAGE_USAGE_STATS",
         "android.permission.BIND_ACCESSIBILITY_SERVICE",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -46,7 +48,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./scripts/guardian-native-plugin"
     ],
     "experiments": {
       "typedRoutes": true,

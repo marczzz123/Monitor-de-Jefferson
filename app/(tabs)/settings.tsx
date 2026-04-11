@@ -79,7 +79,7 @@ export default function SettingsScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}> 
           <View style={styles.sectionHeader}>
             <Feather name="sliders" size={16} color={colors.primary} />
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Sensibilidad de la IA</Text>
@@ -107,21 +107,19 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={[styles.sensitivityDesc, { color: colors.mutedForeground }]}>
+          <Text style={[styles.sensitivityDesc, { color: colors.mutedForeground }]}> 
             {sensitivityDesc[sensitivity]}
           </Text>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}> 
           <View style={styles.sectionHeader}>
             <Feather name="clock" size={16} color={colors.primary} />
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Horarios</Text>
           </View>
           <View style={styles.scheduleRow}>
             <View style={styles.scheduleItem}>
-              <Text style={[styles.scheduleLabel, { color: colors.mutedForeground }]}>
-                Inicio clases
-              </Text>
+              <Text style={[styles.scheduleLabel, { color: colors.mutedForeground }]}>Inicio clases</Text>
               <HourPicker
                 value={schedule.schoolStart}
                 onChange={(h) => updateSchedule({ ...schedule, schoolStart: h })}
@@ -129,9 +127,7 @@ export default function SettingsScreen() {
               />
             </View>
             <View style={styles.scheduleItem}>
-              <Text style={[styles.scheduleLabel, { color: colors.mutedForeground }]}>
-                Fin clases
-              </Text>
+              <Text style={[styles.scheduleLabel, { color: colors.mutedForeground }]}>Fin clases</Text>
               <HourPicker
                 value={schedule.schoolEnd}
                 onChange={(h) => updateSchedule({ ...schedule, schoolEnd: h })}
@@ -139,9 +135,7 @@ export default function SettingsScreen() {
               />
             </View>
             <View style={styles.scheduleItem}>
-              <Text style={[styles.scheduleLabel, { color: colors.mutedForeground }]}>
-                Hora dormir
-              </Text>
+              <Text style={[styles.scheduleLabel, { color: colors.mutedForeground }]}>Hora dormir</Text>
               <HourPicker
                 value={schedule.bedtime}
                 onChange={(h) => updateSchedule({ ...schedule, bedtime: h })}
@@ -151,58 +145,66 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <Text style={[styles.listTitle, { color: colors.foreground }]}>Apps monitoreadas</Text>
-        <Text style={[styles.listSub, { color: colors.mutedForeground }]}>
-          Activa las apps que son distracciones. La IA las cerrara automaticamente.
+        <Text style={[styles.listTitle, { color: colors.foreground }]}>Apps del dispositivo</Text>
+        <Text style={[styles.listSub, { color: colors.mutedForeground }]}> 
+          Estas apps vienen del Android instalado, no de una lista fija. Activa las que quieres restringir.
         </Text>
 
-        {allApps.map((app) => {
-          const isRestricted = restrictedApps.includes(app.packageName);
-          const categoryColor =
-            app.category === "distraction"
-              ? colors.destructive
-              : app.category === "educational"
-              ? colors.success
-              : colors.warning;
-          const categoryLabel =
-            app.category === "distraction"
-              ? "Distraccion"
-              : app.category === "educational"
-              ? "Educativa"
-              : "Neutral";
-          return (
-            <View
-              key={app.packageName}
-              style={[styles.appRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-            >
+        {allApps.length === 0 ? (
+          <View style={[styles.emptyApps, { backgroundColor: colors.card, borderColor: colors.border }]}> 
+            <Feather name="smartphone" size={26} color={colors.mutedForeground} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No se pudieron leer apps todavia</Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}> 
+              Abre Guardian en Android, activa Acceso al uso de apps y vuelve a iniciar el monitoreo. La app ya no mostrara apps inventadas.
+            </Text>
+          </View>
+        ) : (
+          allApps.map((app) => {
+            const isRestricted = restrictedApps.includes(app.packageName);
+            const categoryColor =
+              app.category === "distraction"
+                ? colors.destructive
+                : app.category === "educational"
+                ? colors.success
+                : colors.warning;
+            const categoryLabel =
+              app.category === "distraction"
+                ? "Distraccion"
+                : app.category === "educational"
+                ? "Educativa"
+                : "Neutral";
+            return (
               <View
-                style={[
-                  styles.appIconBox,
-                  { backgroundColor: categoryColor + "18" },
-                ]}
+                key={app.packageName}
+                style={[styles.appRow, { backgroundColor: colors.card, borderColor: colors.border }]}
               >
-                <Feather name={app.icon as any} size={18} color={categoryColor} />
-              </View>
-              <View style={styles.appInfo}>
-                <Text style={[styles.appName, { color: colors.foreground }]}>{app.name}</Text>
-                <View style={[styles.categoryBadge, { backgroundColor: categoryColor + "18" }]}>
-                  <Text style={[styles.categoryText, { color: categoryColor }]}>{categoryLabel}</Text>
+                <View style={[styles.appIconBox, { backgroundColor: categoryColor + "18" }]}> 
+                  <Feather name={app.icon as any} size={18} color={categoryColor} />
                 </View>
+                <View style={styles.appInfo}>
+                  <Text style={[styles.appName, { color: colors.foreground }]}>{app.name}</Text>
+                  <Text style={[styles.packageName, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    {app.packageName}
+                  </Text>
+                  <View style={[styles.categoryBadge, { backgroundColor: categoryColor + "18" }]}> 
+                    <Text style={[styles.categoryText, { color: categoryColor }]}>{categoryLabel}</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isRestricted}
+                  onValueChange={() => toggleRestrictedApp(app.packageName)}
+                  trackColor={{ false: colors.muted, true: colors.destructive + "80" }}
+                  thumbColor={isRestricted ? colors.destructive : colors.mutedForeground}
+                />
               </View>
-              <Switch
-                value={isRestricted}
-                onValueChange={() => toggleRestrictedApp(app.packageName)}
-                trackColor={{ false: colors.muted, true: colors.destructive + "80" }}
-                thumbColor={isRestricted ? colors.destructive : colors.mutedForeground}
-              />
-            </View>
-          );
-        })}
+            );
+          })
+        )}
 
-        <View style={[styles.infoBox, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
+        <View style={[styles.infoBox, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}> 
           <Feather name="info" size={16} color={colors.primary} />
-          <Text style={[styles.infoText, { color: colors.foreground }]}>
-            Para el monitoreo real en Android se necesitan dos permisos adicionales: "Acceso al uso de apps" y "Servicio de accesibilidad". Ve a la guia de instalacion para activarlos.
+          <Text style={[styles.infoText, { color: colors.foreground }]}> 
+            Guardian ahora usa lectura nativa de Android para apps instaladas y uso reciente. Si no aparecen datos, falta activar Acceso al uso de apps en Ajustes.
           </Text>
         </View>
       </ScrollView>
@@ -244,6 +246,15 @@ const styles = StyleSheet.create({
   hourVal: { fontSize: 14, fontFamily: "Inter_700Bold", minWidth: 40, textAlign: "center" },
   listTitle: { fontSize: 17, fontFamily: "Inter_700Bold", marginTop: 4 },
   listSub: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 4, lineHeight: 18 },
+  emptyApps: {
+    borderRadius: 14,
+    padding: 22,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+  },
+  emptyTitle: { fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "center" },
+  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 18 },
   appRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -261,6 +272,7 @@ const styles = StyleSheet.create({
   },
   appInfo: { flex: 1, gap: 4 },
   appName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  packageName: { fontSize: 11, fontFamily: "Inter_400Regular" },
   categoryBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
   categoryText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   infoBox: {
