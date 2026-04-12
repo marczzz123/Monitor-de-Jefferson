@@ -2,7 +2,7 @@
   "expo": {
     "name": "Guardian - Control Parental",
     "slug": "control-parental",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "control-parental",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.guardian.controlparental",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#2D7BFF"
@@ -26,7 +26,6 @@
       "permissions": [
         "android.permission.QUERY_ALL_PACKAGES",
         "android.permission.PACKAGE_USAGE_STATS",
-        "android.permission.BIND_ACCESSIBILITY_SERVICE",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_DATA_SYNC",

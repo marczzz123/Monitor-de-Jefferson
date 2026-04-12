@@ -95,17 +95,22 @@ const nativeModule = `package com.guardian.controlparental;
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Build;
 import android.os.Process;
+import android.provider.Settings;
+import android.text.TextUtils;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import java.util.ArrayList;
@@ -117,6 +122,9 @@ import java.util.List;
 import java.util.Set;
 
 public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
+  private static final String PREFS_NAME = "guardian_native";
+  private static final String RESTRICTED_KEY = "restricted_packages";
+  private static final String MONITORING_KEY = "monitoring_enabled";
   private final ReactApplicationContext reactContext;
 
   public GuardianDeviceAppsModule(ReactApplicationContext reactContext) {
@@ -227,8 +235,29 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void isAccessibilityServiceEnabled(Promise promise) {
+    promise.resolve(isGuardianAccessibilityEnabled());
+  }
+
+  @ReactMethod
+  public void setRestrictedApps(ReadableArray packageNames, Promise promise) {
+    try {
+      Set<String> packages = new HashSet<>();
+      for (int i = 0; i < packageNames.size(); i++) {
+        String packageName = packageNames.getString(i);
+        if (packageName != null && packageName.length() > 0) packages.add(packageName);
+      }
+      getPrefs().edit().putStringSet(RESTRICTED_KEY, packages).apply();
+      promise.resolve(true);
+    } catch (Exception error) {
+      promise.reject("RESTRICTED_APPS_ERROR", error);
+    }
+  }
+
+  @ReactMethod
   public void startMonitoringService(Promise promise) {
     try {
+      getPrefs().edit().putBoolean(MONITORING_KEY, true).apply();
       Intent intent = new Intent(reactContext, GuardianMonitoringService.class);
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         reactContext.startForegroundService(intent);
@@ -244,12 +273,17 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
   @ReactMethod
   public void stopMonitoringService(Promise promise) {
     try {
+      getPrefs().edit().putBoolean(MONITORING_KEY, false).apply();
       Intent intent = new Intent(reactContext, GuardianMonitoringService.class);
       reactContext.stopService(intent);
       promise.resolve(true);
     } catch (Exception error) {
       promise.reject("SERVICE_STOP_ERROR", error);
     }
+  }
+
+  private SharedPreferences getPrefs() {
+    return reactContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
   }
 
   private boolean hasUsagePermission() {
@@ -266,6 +300,18 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
     } catch (Exception error) {
       return false;
     }
+  }
+
+  private boolean isGuardianAccessibilityEnabled() {
+    String expected = new ComponentName(reactContext, GuardianAccessibilityService.class).flattenToString();
+    String enabledServices = Settings.Secure.getString(reactContext.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+    if (enabledServices == null) return false;
+    TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
+    splitter.setString(enabledServices);
+    while (splitter.hasNext()) {
+      if (expected.equalsIgnoreCase(splitter.next())) return true;
+    }
+    return false;
   }
 
   private String inferCategory(String label, String packageName) {
@@ -344,6 +390,51 @@ public class GuardianMonitoringService extends Service {
 }
 `;
 
+const accessibilityService = `package com.guardian.controlparental;
+
+import android.accessibilityservice.AccessibilityService;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.os.SystemClock;
+import android.view.accessibility.AccessibilityEvent;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
+public class GuardianAccessibilityService extends AccessibilityService {
+  private static final String PREFS_NAME = "guardian_native";
+  private static final String RESTRICTED_KEY = "restricted_packages";
+  private static final String MONITORING_KEY = "monitoring_enabled";
+  private long lastBlockAt = 0;
+  private String lastBlockedPackage = "";
+
+  @Override
+  public void onAccessibilityEvent(AccessibilityEvent event) {
+    if (event == null || event.getPackageName() == null) return;
+    int type = event.getEventType();
+    if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
+
+    SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    if (!prefs.getBoolean(MONITORING_KEY, false)) return;
+
+    String packageName = event.getPackageName().toString();
+    if (packageName.equals(getPackageName())) return;
+
+    Set<String> restricted = new HashSet<>(prefs.getStringSet(RESTRICTED_KEY, Collections.<String>emptySet()));
+    if (!restricted.contains(packageName)) return;
+
+    long now = SystemClock.elapsedRealtime();
+    if (packageName.equals(lastBlockedPackage) && now - lastBlockAt < 1500) return;
+    lastBlockedPackage = packageName;
+    lastBlockAt = now;
+    performGlobalAction(GLOBAL_ACTION_HOME);
+  }
+
+  @Override
+  public void onInterrupt() {}
+}
+`;
+
 const receiver = `package com.guardian.controlparental;
 
 import android.content.BroadcastReceiver;
@@ -365,6 +456,17 @@ public class GuardianBootReceiver extends BroadcastReceiver {
 }
 `;
 
+const accessibilityConfig = `<?xml version="1.0" encoding="utf-8"?>
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
+  android:accessibilityFeedbackType="feedbackGeneric"
+  android:accessibilityFlags="flagReportViewIds"
+  android:canRetrieveWindowContent="false"
+  android:canPerformGestures="false"
+  android:description="@string/guardian_accessibility_description"
+  android:notificationTimeout="100" />
+`;
+
 module.exports = function withGuardianNative(config) {
   config = withAndroidManifest(config, (config) => {
     const manifest = config.modResults.manifest;
@@ -383,6 +485,26 @@ module.exports = function withGuardianNative(config) {
           "android:exported": "false",
           "android:foregroundServiceType": "dataSync",
         },
+      });
+      addApplicationItem(application, "service", ".GuardianAccessibilityService", {
+        $: {
+          "android:name": ".GuardianAccessibilityService",
+          "android:permission": "android.permission.BIND_ACCESSIBILITY_SERVICE",
+          "android:exported": "true",
+        },
+        "intent-filter": [
+          {
+            action: [{ $: { "android:name": "android.accessibilityservice.AccessibilityService" } }],
+          },
+        ],
+        "meta-data": [
+          {
+            $: {
+              "android:name": "android.accessibilityservice",
+              "android:resource": "@xml/guardian_accessibility_service",
+            },
+          },
+        ],
       });
       addApplicationItem(application, "receiver", ".GuardianBootReceiver", {
         $: {
@@ -403,10 +525,23 @@ module.exports = function withGuardianNative(config) {
   return withDangerousMod(config, ["android", async (config) => {
     const androidRoot = config.modRequest.platformProjectRoot;
     const javaRoot = path.join(androidRoot, "app/src/main/java/com/guardian/controlparental");
+    const resRoot = path.join(androidRoot, "app/src/main/res");
     writeFile(path.join(javaRoot, "GuardianNativePackage.java"), nativePackage);
     writeFile(path.join(javaRoot, "GuardianDeviceAppsModule.java"), nativeModule);
     writeFile(path.join(javaRoot, "GuardianMonitoringService.java"), service);
+    writeFile(path.join(javaRoot, "GuardianAccessibilityService.java"), accessibilityService);
     writeFile(path.join(javaRoot, "GuardianBootReceiver.java"), receiver);
+    writeFile(path.join(resRoot, "xml/guardian_accessibility_service.xml"), accessibilityConfig);
+
+    const stringsPath = path.join(resRoot, "values/strings.xml");
+    if (fs.existsSync(stringsPath)) {
+      let strings = fs.readFileSync(stringsPath, "utf8");
+      if (!strings.includes("guardian_accessibility_description")) {
+        strings = strings.replace("</resources>", "  <string name=\"guardian_accessibility_description\">Permite que Guardian detecte apps restringidas y vuelva al inicio cuando se abran.</string>\n</resources>");
+        fs.writeFileSync(stringsPath, strings);
+      }
+    }
+
     injectPackage(androidRoot);
     return config;
   }]);

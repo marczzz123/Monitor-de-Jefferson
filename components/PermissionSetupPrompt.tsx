@@ -16,7 +16,7 @@ import {
 
 import { useColors } from "@/hooks/useColors";
 
-const ACK_KEY = "@guardian_permissions_acknowledged";
+const ACK_KEY = "@guardian_permissions_acknowledged_v2";
 const ANDROID_PACKAGE = "com.guardian.controlparental";
 
 async function openAndroidSettings(action: string, data?: string) {
@@ -77,7 +77,7 @@ export function PermissionSetupPrompt() {
     },
     {
       title: "Servicio de accesibilidad",
-      description: "Necesario para reaccionar cuando se abre una app bloqueada.",
+      description: "Activa Guardian - Control Parental dentro de Accesibilidad para poder cerrar apps restringidas.",
       icon: "shield",
       actionLabel: "Abrir ajuste",
       onPress: () => openAndroidSettings("android.settings.ACCESSIBILITY_SETTINGS"),
@@ -113,7 +113,7 @@ export function PermissionSetupPrompt() {
             </View>
             <Text style={[styles.title, { color: colors.foreground }]}>Activa los permisos de Guardian</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}> 
-              Para monitorear en Android, Guardian necesita estos permisos especiales. Toca cada boton, activa el permiso en Ajustes y vuelve a la app.
+              Para monitorear en Android, Guardian necesita estos permisos especiales. En Accesibilidad debe aparecer Guardian - Control Parental; actívalo y vuelve a la app.
             </Text>
 
             {permissions.map((permission) => (

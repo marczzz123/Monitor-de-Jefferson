@@ -16,6 +16,8 @@ interface GuardianDeviceAppsModule {
   getInstalledApps: () => Promise<DeviceAppInfo[]>;
   getUsageStats: () => Promise<DeviceUsageEntry[]>;
   hasUsageStatsPermission: () => Promise<boolean>;
+  isAccessibilityServiceEnabled: () => Promise<boolean>;
+  setRestrictedApps: (packageNames: string[]) => Promise<boolean>;
   startMonitoringService: () => Promise<boolean>;
   stopMonitoringService: () => Promise<boolean>;
 }
@@ -35,6 +37,16 @@ export async function getUsageStats(): Promise<DeviceUsageEntry[]> {
 export async function hasUsageStatsPermission(): Promise<boolean> {
   if (Platform.OS !== "android" || !nativeModule?.hasUsageStatsPermission) return false;
   return nativeModule.hasUsageStatsPermission();
+}
+
+export async function isAccessibilityServiceEnabled(): Promise<boolean> {
+  if (Platform.OS !== "android" || !nativeModule?.isAccessibilityServiceEnabled) return false;
+  return nativeModule.isAccessibilityServiceEnabled();
+}
+
+export async function setRestrictedApps(packageNames: string[]): Promise<boolean> {
+  if (Platform.OS !== "android" || !nativeModule?.setRestrictedApps) return false;
+  return nativeModule.setRestrictedApps(packageNames);
 }
 
 export async function startMonitoringService(): Promise<boolean> {

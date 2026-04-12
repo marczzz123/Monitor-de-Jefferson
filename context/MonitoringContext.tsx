@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import {
   getInstalledApps,
   getUsageStats,
+  setRestrictedApps as setNativeRestrictedApps,
   startMonitoringService,
   stopMonitoringService,
   type DeviceAppInfo,
@@ -96,6 +97,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     appsRef.current = allApps;
   }, [allApps]);
 
+  useEffect(() => {
+    setNativeRestrictedApps(restrictedApps).catch(() => {});
+  }, [restrictedApps]);
+
   async function loadData() {
     try {
       const stored = await AsyncStorage.getItem("@guardian_data");
@@ -183,6 +188,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setIsMonitoring((prev) => {
       const next = !prev;
       if (next) {
+        setNativeRestrictedApps(restrictedApps).catch(() => {});
         startMonitoringService().catch(() => {});
       } else {
         stopMonitoringService().catch(() => {});
@@ -197,6 +203,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         ? prev.filter((p) => p !== packageName)
         : [...prev, packageName];
       saveData({ restrictedApps: next });
+      setNativeRestrictedApps(next).catch(() => {});
       return next;
     });
   }
