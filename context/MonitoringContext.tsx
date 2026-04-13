@@ -78,8 +78,12 @@ export const SOCIAL_PACKAGES = [
 
 export const GAME_KEYWORDS = [
   "game", "games", "gaming", "candy", "clash", "minecraft",
-  "roblox", "pubg", "freefire", "fortnite", "cod", "garena",
-  "supercell", "king.com", "gameloft", "ubisoft", "ea.games",
+  "roblox", "pubg", "freefire", "free.fire", "fortnite", "cod", "callofduty", "garena",
+  "supercell", "king.com", "gameloft", "ubisoft", "ea.games", "eagames",
+  "moonton", "mobile.legends", "mlbb", "brawl", "royale", "subway", "templerun",
+  "among", "playrix", "miniclip", "zynga", "netmarble", "mihoyo", "hoyoverse",
+  "genshin", "tencent", "honorofkings", "riotgames", "wildrift", "steam",
+  "nintendo", "pokemon", "epicgames", "epic.games", "voodoo", "saygames",
 ];
 
 const SYSTEM_PKG_PREFIXES = [
@@ -282,6 +286,18 @@ function normalizeApp(app: DeviceAppInfo): MonitoredApp {
   };
 }
 
+function getEffectiveRestrictedApps(apps: MonitoredApp[], restrictedApps: string[], mode: AppMode): string[] {
+  const packages = new Set(restrictedApps);
+  for (const app of apps) {
+    if (isModeBlocked(mode, app.packageName, app.name, restrictedApps)) {
+      packages.add(app.packageName);
+    } else if (!restrictedApps.includes(app.packageName)) {
+      packages.delete(app.packageName);
+    }
+  }
+  return [...packages];
+}
+
 export function MonitoringProvider({ children }: { children: React.ReactNode }) {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [currentApp, setCurrentApp] = useState<MonitoredApp | null>(null);
@@ -333,8 +349,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   }, [allApps]);
 
   useEffect(() => {
-    setNativeRestrictedApps(restrictedApps).catch(() => {});
-  }, [restrictedApps]);
+    const effectiveRestrictedApps = getEffectiveRestrictedApps(allApps, restrictedApps, currentMode);
+    setNativeRestrictedApps(effectiveRestrictedApps).catch(() => {});
+  }, [allApps, restrictedApps, currentMode]);
 
   async function loadData() {
     try {
@@ -423,7 +440,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setIsMonitoring((prev) => {
       const next = !prev;
       if (next) {
-        setNativeRestrictedApps(restrictedApps).catch(() => {});
+        const effectiveRestrictedApps = getEffectiveRestrictedApps(appsRef.current, restrictedApps, getCurrentMode(scheduleRef.current));
+        setNativeRestrictedApps(effectiveRestrictedApps).catch(() => {});
         startMonitoringService().catch(() => {});
       } else {
         stopMonitoringService().catch(() => {});

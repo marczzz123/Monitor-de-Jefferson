@@ -316,7 +316,8 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
 
   private String inferCategory(String label, String packageName) {
     String text = (label + " " + packageName).toLowerCase();
-    if (text.contains("youtube") || text.contains("tiktok") || text.contains("instagram") || text.contains("facebook") || text.contains("roblox") || text.contains("freefire") || text.contains("game") || text.contains("snapchat")) return "distraction";
+    if (text.contains("youtube") || text.contains("tiktok") || text.contains("instagram") || text.contains("facebook") || text.contains("snapchat")) return "distraction";
+    if (text.contains("roblox") || text.contains("freefire") || text.contains("free.fire") || text.contains("game") || text.contains("games") || text.contains("gaming") || text.contains("minecraft") || text.contains("clash") || text.contains("brawl") || text.contains("pubg") || text.contains("fortnite") || text.contains("garena") || text.contains("moonton") || text.contains("mobile.legends") || text.contains("subway") || text.contains("templerun") || text.contains("among") || text.contains("playrix") || text.contains("miniclip") || text.contains("zynga") || text.contains("netmarble") || text.contains("mihoyo") || text.contains("hoyoverse") || text.contains("genshin") || text.contains("tencent") || text.contains("riotgames") || text.contains("wildrift") || text.contains("steam") || text.contains("nintendo") || text.contains("pokemon") || text.contains("epicgames") || text.contains("voodoo") || text.contains("saygames")) return "distraction";
     if (text.contains("classroom") || text.contains("duolingo") || text.contains("khan") || text.contains("meet") || text.contains("zoom") || text.contains("calculator") || text.contains("school") || text.contains("learn")) return "educational";
     return "neutral";
   }
