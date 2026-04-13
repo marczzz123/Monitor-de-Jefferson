@@ -17,6 +17,7 @@ import { PermissionSetupPrompt } from "@/components/PermissionSetupPrompt";
 import {
   getModeDescription,
   getModeLabel,
+  isModeBlocked,
   type AppMode,
   useMonitoring,
 } from "@/context/MonitoringContext";
@@ -94,8 +95,8 @@ export default function DashboardScreen() {
   const totalMinutes = todayUsage.reduce((s, u) => s + u.minutes, 0);
   const blockedToday = recentActions.filter((a) => a.action === "close").length;
   const warnedToday = recentActions.filter((a) => a.action === "warn").length;
-  const allowedApps = allApps.filter(a => !restrictedApps.includes(a.packageName));
-  const blockedApps = allApps.filter(a => restrictedApps.includes(a.packageName));
+  const blockedApps = allApps.filter(a => isModeBlocked(currentMode, a.packageName, a.name, restrictedApps));
+  const allowedApps = allApps.filter(a => !isModeBlocked(currentMode, a.packageName, a.name, restrictedApps));
 
   const analyzeCurrentApp = useCallback(async () => {
     if (!currentApp || analyzing) return;

@@ -125,6 +125,7 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
   private static final String PREFS_NAME = "guardian_native";
   private static final String RESTRICTED_KEY = "restricted_packages";
   private static final String MONITORING_KEY = "monitoring_enabled";
+  private static final String MODE_KEY = "current_mode";
   private final ReactApplicationContext reactContext;
 
   public GuardianDeviceAppsModule(ReactApplicationContext reactContext) {
@@ -251,6 +252,16 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
       promise.resolve(true);
     } catch (Exception error) {
       promise.reject("RESTRICTED_APPS_ERROR", error);
+    }
+  }
+
+  @ReactMethod
+  public void setCurrentMode(String mode, Promise promise) {
+    try {
+      getPrefs().edit().putString(MODE_KEY, mode).apply();
+      promise.resolve(true);
+    } catch (Exception error) {
+      promise.reject("SET_MODE_ERROR", error);
     }
   }
 
@@ -398,16 +409,48 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.accessibility.AccessibilityEvent;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class GuardianAccessibilityService extends AccessibilityService {
   private static final String PREFS_NAME = "guardian_native";
   private static final String RESTRICTED_KEY = "restricted_packages";
   private static final String MONITORING_KEY = "monitoring_enabled";
+  private static final String MODE_KEY = "current_mode";
   private long lastBlockAt = 0;
   private String lastBlockedPackage = "";
+
+  // Apps sociales permitidas en modo almuerzo (TikTok e Instagram)
+  private static final List<String> LUNCH_ALLOWED = Arrays.asList(
+    "com.zhiliaoapp.musically",
+    "com.ss.android.ugc.trill",
+    "com.ss.android.ugc.aweme",
+    "com.instagram.android"
+  );
+
+  // Palabras clave de juegos para clasificacion nativa
+  private static final String[] GAME_KEYWORDS = {
+    "game", "games", "gaming", "roblox", "freefire", "free.fire", "minecraft",
+    "clash", "brawl", "pubg", "fortnite", "garena", "moonton", "mobile.legends",
+    "mlbb", "subway", "templerun", "among", "playrix", "miniclip", "zynga",
+    "netmarble", "mihoyo", "hoyoverse", "genshin", "tencent", "riotgames",
+    "wildrift", "steam", "nintendo", "pokemon", "epicgames", "voodoo", "saygames",
+    "candy", "candy.crush", "king.com", "supercell", "gameloft", "ubisoft",
+    "ea.games", "eagames", "callofduty", "honorofkings", "playdemic"
+  };
+
+  // Prefijos de apps del sistema que siempre se permiten
+  private static final String[] SYSTEM_PREFIXES = {
+    "com.android.", "android.", "com.google.android.gms", "com.google.android.gsf",
+    "com.google.android.inputmethod", "com.samsung.android.", "com.samsung.",
+    "com.sec.android.", "com.miui.", "com.xiaomi.", "com.huawei.", "com.honor.",
+    "com.oppo.", "com.coloros.", "com.realme.", "com.oneplus.", "com.vivo.",
+    "com.asus.", "com.motorola.", "com.lenovo.", "com.lge.", "com.sonyericsson.",
+    "com.qualcomm.", "com.mediatek."
+  };
 
   @Override
   public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -421,8 +464,36 @@ public class GuardianAccessibilityService extends AccessibilityService {
     String packageName = event.getPackageName().toString();
     if (packageName.equals(getPackageName())) return;
 
+    // Apps del sistema nunca se bloquean
+    if (isSystemApp(packageName)) return;
+
+    String mode = prefs.getString(MODE_KEY, "free");
     Set<String> restricted = new HashSet<>(prefs.getStringSet(RESTRICTED_KEY, Collections.<String>emptySet()));
-    if (!restricted.contains(packageName)) return;
+
+    boolean shouldBlock = false;
+
+    if ("sleep".equals(mode)) {
+      // Modo dormir: bloquear todo
+      shouldBlock = true;
+    } else if ("school".equals(mode)) {
+      // Modo colegio: solo sistema y educativas permitidas
+      // La lista restricted ya contiene lo que JS calculó; la usamos como verdad
+      shouldBlock = restricted.contains(packageName);
+    } else if ("lunch".equals(mode)) {
+      // Modo almuerzo: SOLO TikTok e Instagram. Todo lo demás bloqueado.
+      boolean isLunchAllowed = LUNCH_ALLOWED.contains(packageName);
+      if (!isLunchAllowed) {
+        shouldBlock = true;
+      }
+    } else if ("study".equals(mode)) {
+      // Modo estudio: juegos y redes sociales bloqueados
+      shouldBlock = restricted.contains(packageName) || isGameApp(packageName);
+    } else {
+      // Modo libre: solo lo que JS marcó manualmente
+      shouldBlock = restricted.contains(packageName);
+    }
+
+    if (!shouldBlock) return;
 
     long now = SystemClock.elapsedRealtime();
     if (packageName.equals(lastBlockedPackage) && now - lastBlockAt < 1500) return;
@@ -433,6 +504,21 @@ public class GuardianAccessibilityService extends AccessibilityService {
 
   @Override
   public void onInterrupt() {}
+
+  private boolean isSystemApp(String packageName) {
+    for (String prefix : SYSTEM_PREFIXES) {
+      if (packageName.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  private boolean isGameApp(String packageName) {
+    String pkg = packageName.toLowerCase();
+    for (String keyword : GAME_KEYWORDS) {
+      if (pkg.contains(keyword)) return true;
+    }
+    return false;
+  }
 }
 `;
 

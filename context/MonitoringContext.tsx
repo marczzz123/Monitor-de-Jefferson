@@ -5,6 +5,7 @@ import {
   getInstalledApps,
   getUsageStats,
   setRestrictedApps as setNativeRestrictedApps,
+  setCurrentMode as setNativeCurrentMode,
   startMonitoringService,
   stopMonitoringService,
   type DeviceAppInfo,
@@ -351,6 +352,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const effectiveRestrictedApps = getEffectiveRestrictedApps(allApps, restrictedApps, currentMode);
     setNativeRestrictedApps(effectiveRestrictedApps).catch(() => {});
+    setNativeCurrentMode(currentMode).catch(() => {});
   }, [allApps, restrictedApps, currentMode]);
 
   async function loadData() {
@@ -456,7 +458,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         ? prev.filter((p) => p !== packageName)
         : [...prev, packageName];
       saveData({ restrictedApps: next });
-      setNativeRestrictedApps(next).catch(() => {});
+      const effective = getEffectiveRestrictedApps(appsRef.current, next, getCurrentMode(scheduleRef.current));
+      setNativeRestrictedApps(effective).catch(() => {});
       return next;
     });
   }
