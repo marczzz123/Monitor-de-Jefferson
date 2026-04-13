@@ -31,20 +31,20 @@ function getInitialMessage(mode: string): string {
 
   if (mode === "study") {
     if (subjects.length > 0) {
-      return `Hola Jefferson! Hoy es ${dayName} y tienes estas materias: ${subjects.join(", ")}. ¿En cuál necesitas ayuda? Recuerda que no te daré las respuestas directas, te guiaré con pistas para que las descubras tú mismo.`;
+      return `Hola Jefferson! Hoy es ${dayName} y tienes: ${subjects.join(", ")}. ¿En cuál necesitas ayuda? No te daré las respuestas directas, pero sí buenas pistas. A las 7 PM tienes tiempo libre para juegos y redes.`;
     }
-    return "Hola Jefferson! Estoy aquí para ayudarte con tus tareas. No te daré las respuestas directas, te guiaré con pistas. ¿En qué materia necesitas ayuda?";
+    return "Hola Jefferson! Estoy aquí para ayudarte con tus tareas. No te daré respuestas directas, sino pistas. ¿En qué materia necesitas ayuda? A las 7 PM es tu tiempo libre.";
   }
   if (mode === "school") {
-    return "Estás en horario escolar. Puedo ayudarte con dudas de clase o si necesitas asistencia urgente. ¿Qué necesitas?";
+    return "Estás en horario escolar. Puedo ayudarte con dudas de clase si necesitas. ¿Qué necesitas?";
   }
   if (mode === "free" || mode === "lunch") {
     if (subjects.length > 0) {
-      return `Hola Jefferson! Hoy es ${dayName}. Tienes estas materias: ${subjects.join(", ")}. Si necesitas ayuda con alguna tarea, cuéntame. Si no, disfruta tu tiempo libre.`;
+      return `Hola Jefferson! Hoy es ${dayName}. Tienes estas materias: ${subjects.join(", ")}. Si tienes alguna tarea o duda, cuéntame. También puedes preguntarme sobre el simulacro.`;
     }
-    return "Hola Jefferson! Soy tu tutor IA. Si tienes tareas o dudas de clase, cuéntame y te ayudo. No doy respuestas directas, pero sí buenas pistas.";
+    return "Hola Jefferson! Soy tu tutor IA. Si tienes tareas o dudas, cuéntame y te guío. También puedo ayudarte a preparar el simulacro.";
   }
-  return "Hola, soy Guardian IA. Puedo ayudarte con tareas y monitorear el uso de apps. ¿En qué te ayudo?";
+  return "Hola, soy Guardian IA. Puedo ayudarte con tareas, el simulacro o revisar el uso de apps. ¿Qué necesitas?";
 }
 
 function ModeTag({ mode, colors }: { mode: string; colors: ReturnType<typeof useColors> }) {
