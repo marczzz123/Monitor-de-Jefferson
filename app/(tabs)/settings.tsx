@@ -193,6 +193,21 @@ export default function SettingsScreen() {
             </View>
             <View style={[styles.scheduleDivider, { backgroundColor: colors.border }]} />
             <View style={styles.scheduleRow}>
+              <View style={[styles.scheduleIcon, { backgroundColor: colors.success + "15" }]}>
+                <Feather name="play-circle" size={14} color={colors.success} />
+              </View>
+              <View style={styles.scheduleInfo}>
+                <Text style={[styles.scheduleLabel, { color: colors.foreground }]}>Inicio tiempo libre (juegos + redes)</Text>
+                <HourMinPicker
+                  hour={schedule.gamesStart ?? 19} minute={schedule.gamesStartMin ?? 0}
+                  onChangeHour={(h) => updateSched({ gamesStart: h })}
+                  onChangeMin={(m) => updateSched({ gamesStartMin: m })}
+                  colors={colors}
+                />
+              </View>
+            </View>
+            <View style={[styles.scheduleDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.scheduleRow}>
               <View style={[styles.scheduleIcon, { backgroundColor: "#6366F115" }]}>
                 <Feather name="moon" size={14} color="#6366F1" />
               </View>
@@ -210,7 +225,7 @@ export default function SettingsScreen() {
           <View style={[styles.scheduleNote, { backgroundColor: colors.primary + "10" }]}>
             <Feather name="info" size={12} color={colors.primary} />
             <Text style={[styles.scheduleNoteText, { color: colors.mutedForeground }]}>
-              L-V: Colegio → Almuerzo (solo social) → Estudio → Libre. Fines de semana: solo libre y dormir.
+              L-V: Colegio → Almuerzo (social) → Estudio (sin juegos) → Libre con juegos. Fines de semana: libre todo el día.
             </Text>
           </View>
         </SectionCard>
