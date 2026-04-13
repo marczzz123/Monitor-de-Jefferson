@@ -104,10 +104,10 @@ export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
   }
 
   if (data.currentMode === "school") {
-    if (category === "system") {
-      return { decision: "allow", reason: "App del sistema permitida.", message: "Permitida por Guardian." };
+    if (category === "system" || category === "educational") {
+      return { decision: "allow", reason: "Permitida en horario escolar.", message: "Permitida por Guardian." };
     }
-    return { decision: "close", reason: `Horario de colegio.`, message: "Estás en horario escolar. Concéntrate." };
+    return { decision: "close", reason: `Horario de colegio activo.`, message: "Estás en horario escolar. Concéntrate en clases." };
   }
 
   if (data.currentMode === "lunch") {
