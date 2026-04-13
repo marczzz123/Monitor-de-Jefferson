@@ -243,6 +243,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     refreshInstalledApps();
     const mode = getCurrentMode(scheduleRef.current);
     setCurrentMode(mode);
+    // Auto-inicia el monitoreo al abrir la app
+    setIsMonitoring(true);
+    startMonitoringService().catch(() => {});
     modeIntervalRef.current = setInterval(() => {
       setCurrentMode(getCurrentMode(scheduleRef.current));
     }, 30000);
