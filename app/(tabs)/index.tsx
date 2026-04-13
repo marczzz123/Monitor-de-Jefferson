@@ -83,10 +83,8 @@ export default function DashboardScreen() {
     restrictedApps,
     schedule,
     tasksCompleted,
-    toggleMonitoring,
     addAction,
     addBlockAttempt,
-    getUsageContext,
     allApps,
   } = useMonitoring();
 
@@ -183,17 +181,14 @@ export default function DashboardScreen() {
           <View style={styles.statusRow}>
             <PulsingDot active={isMonitoring} colors={colors} />
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-              {isMonitoring ? "Monitoreando activo" : "Detenido"}
+              {isMonitoring ? "Protección activa" : "Iniciando..."}
             </Text>
           </View>
         </View>
-        <TouchableOpacity
-          onPress={toggleMonitoring}
-          style={[styles.toggleBtn, { backgroundColor: isMonitoring ? colors.destructive : colors.primary }]}
-        >
-          <Feather name={isMonitoring ? "pause" : "play"} size={16} color="#fff" />
-          <Text style={styles.toggleBtnText}>{isMonitoring ? "Pausar" : "Iniciar"}</Text>
-        </TouchableOpacity>
+        <View style={[styles.activeChip, { backgroundColor: colors.success + "18" }]}>
+          <Feather name="shield" size={14} color={colors.success} />
+          <Text style={[styles.activeChipText, { color: colors.success }]}>IA activa</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
@@ -357,8 +352,8 @@ const styles = StyleSheet.create({
   dotWrap: { width: 14, height: 14, alignItems: "center", justifyContent: "center" },
   dotRing: { position: "absolute", width: 14, height: 14, borderRadius: 7 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  toggleBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
-  toggleBtnText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  activeChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  activeChipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   scroll: { padding: 20, gap: 12 },
   modeCard: { borderRadius: 14, padding: 16, borderWidth: 1, gap: 8 },
   modeCardTop: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
