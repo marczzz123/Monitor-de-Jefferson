@@ -55,6 +55,8 @@ export interface Schedule {
   schoolEndMin: number;
   lunchEnd: number;
   lunchEndMin: number;
+  gamesStart: number;
+  gamesStartMin: number;
   bedtime: number;
   bedtimeMin: number;
 }
@@ -117,12 +119,13 @@ export function getCurrentMode(schedule: Schedule): AppMode {
   const schoolStart = schedule.schoolStart * 60 + (schedule.schoolStartMin ?? 0);
   const schoolEnd = schedule.schoolEnd * 60 + (schedule.schoolEndMin ?? 0);
   const lunchEnd = schedule.lunchEnd * 60 + (schedule.lunchEndMin ?? 0);
-  const studyEnd = schedule.bedtime * 60 + (schedule.bedtimeMin ?? 0);
+  const gamesStart = (schedule.gamesStart ?? 19) * 60 + (schedule.gamesStartMin ?? 0);
 
   if (totalMin >= schoolStart && totalMin < schoolEnd) return "school";
   if (totalMin >= schoolEnd && totalMin < lunchEnd) return "lunch";
-  if (totalMin >= lunchEnd && totalMin < studyEnd) return "study";
+  if (totalMin >= lunchEnd && totalMin < gamesStart) return "study";
 
+  // Después de gamesStart (19:00) hasta dormir: modo libre (juegos y redes permitidos)
   return "free";
 }
 
@@ -222,6 +225,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     schoolEndMin: 30,
     lunchEnd: 15,
     lunchEndMin: 30,
+    gamesStart: 19,
+    gamesStartMin: 0,
     bedtime: 22,
     bedtimeMin: 0,
   });
@@ -269,7 +274,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             schoolEndMin: s.schoolEndMin ?? 30,
             lunchEnd: s.lunchEnd ?? 15,
             lunchEndMin: s.lunchEndMin ?? 30,
-            bedtime: s.bedtime ?? 21,
+            gamesStart: s.gamesStart ?? 19,
+            gamesStartMin: s.gamesStartMin ?? 0,
+            bedtime: s.bedtime ?? 22,
             bedtimeMin: s.bedtimeMin ?? 0,
           });
         }
