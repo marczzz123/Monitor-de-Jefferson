@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useMonitoring } from "@/context/MonitoringContext";
 import { useColors } from "@/hooks/useColors";
-import { streamChat, type ChatMessage } from "@/services/ai";
+import { streamChat, getTodaySubjects, getDayName, type ChatMessage } from "@/services/ai";
 
 interface Message {
   id: string;
@@ -26,13 +26,25 @@ interface Message {
 }
 
 function getInitialMessage(mode: string): string {
+  const subjects = getTodaySubjects();
+  const dayName = getDayName();
+
   if (mode === "study") {
-    return "Hola Jefferson! Estoy aqui para ayudarte con tus tareas. Pero no te voy a dar las respuestas directas, te voy a guiar para que las descubras tu mismo. Cuéntame en que estas trabajando.";
+    if (subjects.length > 0) {
+      return `Hola Jefferson! Hoy es ${dayName} y tienes estas materias: ${subjects.join(", ")}. ¿En cuál necesitas ayuda? Recuerda que no te daré las respuestas directas, te guiaré con pistas para que las descubras tú mismo.`;
+    }
+    return "Hola Jefferson! Estoy aquí para ayudarte con tus tareas. No te daré las respuestas directas, te guiaré con pistas. ¿En qué materia necesitas ayuda?";
   }
   if (mode === "school") {
-    return "Estas en horario escolar. Puedo ayudarte con dudas de clase o si necesitas asistencia urgente. Que necesitas?";
+    return "Estás en horario escolar. Puedo ayudarte con dudas de clase o si necesitas asistencia urgente. ¿Qué necesitas?";
   }
-  return "Hola, soy Guardian IA. Puedo ayudarte a entender el uso de apps de Jefferson y tomar decisiones. Preguntame lo que necesites.";
+  if (mode === "free" || mode === "lunch") {
+    if (subjects.length > 0) {
+      return `Hola Jefferson! Hoy es ${dayName}. Tienes estas materias: ${subjects.join(", ")}. Si necesitas ayuda con alguna tarea, cuéntame. Si no, disfruta tu tiempo libre.`;
+    }
+    return "Hola Jefferson! Soy tu tutor IA. Si tienes tareas o dudas de clase, cuéntame y te ayudo. No doy respuestas directas, pero sí buenas pistas.";
+  }
+  return "Hola, soy Guardian IA. Puedo ayudarte con tareas y monitorear el uso de apps. ¿En qué te ayudo?";
 }
 
 function ModeTag({ mode, colors }: { mode: string; colors: ReturnType<typeof useColors> }) {
