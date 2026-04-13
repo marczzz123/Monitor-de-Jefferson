@@ -74,33 +74,25 @@ export default function TasksScreen() {
             />
             <View style={styles.unlockInfo}>
               <Text style={[styles.unlockTitle, { color: tasksCompleted ? colors.success : colors.warning }]}>
-                {tasksCompleted ? "Entretenimiento desbloqueado" : "Entretenimiento bloqueado"}
+                {tasksCompleted ? "¡Entretenimiento desbloqueado!" : "Juegos y redes bloqueados"}
               </Text>
               <Text style={[styles.unlockDesc, { color: colors.mutedForeground }]}>
                 {tasksCompleted
-                  ? `Completaste todas las tareas. Los juegos se activan a las ${gamesStartLabel} automáticamente.`
-                  : `Completa todas las materias de mañana para desbloquear redes sociales. Los juegos siempre a las ${gamesStartLabel}.`
+                  ? "Completaste todas las materias de mañana. Los juegos y las redes sociales están disponibles."
+                  : "Estudia cada materia de mañana con el tutor IA para desbloquear los juegos y las redes sociales."
                 }
               </Text>
             </View>
           </View>
 
-          {/* CONDICIONES */}
+          {/* UNA SOLA CONDICIÓN */}
           <View style={styles.conditionsRow}>
             <View style={[styles.conditionChip, {
               backgroundColor: tasksCompleted ? colors.success + "20" : colors.muted,
             }]}>
-              <Feather name={tasksCompleted ? "check" : "circle"} size={12} color={tasksCompleted ? colors.success : colors.mutedForeground} />
+              <Feather name={tasksCompleted ? "check-circle" : "book"} size={12} color={tasksCompleted ? colors.success : colors.mutedForeground} />
               <Text style={[styles.conditionText, { color: tasksCompleted ? colors.success : colors.mutedForeground }]}>
-                Tareas de mañana
-              </Text>
-            </View>
-            <View style={[styles.conditionChip, {
-              backgroundColor: currentMode === "free" ? colors.success + "20" : colors.muted,
-            }]}>
-              <Feather name={currentMode === "free" ? "check" : "clock"} size={12} color={currentMode === "free" ? colors.success : colors.mutedForeground} />
-              <Text style={[styles.conditionText, { color: currentMode === "free" ? colors.success : colors.mutedForeground }]}>
-                Después de las {gamesStartLabel}
+                {tasksCompleted ? "Todas las materias completadas" : `${doneCount}/${totalCount} materias completadas`}
               </Text>
             </View>
           </View>
@@ -213,7 +205,7 @@ export default function TasksScreen() {
         <View style={[styles.noteCard, { backgroundColor: colors.primary + "08", borderColor: colors.primary + "20" }]}>
           <Feather name="info" size={13} color={colors.primary} />
           <Text style={[styles.noteText, { color: colors.mutedForeground }]}>
-            Las materias se marcan como estudiadas automáticamente cuando hablas del tema con el Tutor IA. Los juegos siempre se activan a las {gamesStartLabel}, sin excepción.
+            Las materias se marcan automáticamente cuando hablas del tema con el Tutor IA. Cuando termines todas las materias de mañana, los juegos y las redes se desbloquean solos.
           </Text>
         </View>
 

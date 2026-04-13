@@ -136,22 +136,22 @@ export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
     if (category === "game") {
       return {
         decision: "close",
-        reason: "Los juegos están bloqueados hasta las 7 PM.",
-        message: "Los juegos se habilitan automáticamente a las 7 PM. ¡Sigue estudiando!",
+        reason: "Los juegos están bloqueados hasta que completes las tareas de mañana.",
+        message: "Termina todas las materias de mañana con el tutor IA para desbloquear los juegos.",
       };
     }
     if (category === "social") {
       if (data.tasksCompleted) {
         return {
           decision: "warn",
-          reason: `${data.appName} habilitada porque completaste tus tareas. Recuerda que los juegos son a las 7 PM.`,
-          message: "Buen trabajo! Social disponible 20 min. Los juegos son a las 7 PM.",
+          reason: `${data.appName} habilitada porque completaste tus tareas.`,
+          message: "¡Buen trabajo! Completaste todas las tareas. Disfruta.",
         };
       }
       return {
         decision: "close",
-        reason: `${data.appName} bloqueada hasta completar tareas de mañana o las 7 PM.`,
-        message: "Termina tus tareas de mañana para desbloquear redes sociales. Los juegos se habilitan a las 7 PM.",
+        reason: `${data.appName} bloqueada hasta completar las tareas de mañana.`,
+        message: "Termina todas las materias de mañana con el tutor para desbloquear el entretenimiento.",
       };
     }
     if (category === "educational") {
@@ -519,17 +519,17 @@ function localStudyTutor(message: string, history: ChatMessage[]): string {
   }
 
   if (isAskingForGame(lower)) {
-    return "Los juegos se habilitan automáticamente a las 7 PM. Mientras tanto, ¿te ayudo con alguna tarea? A las 7 tienes tiempo libre para jugar.";
+    return "Los juegos se desbloquean cuando termines todas las materias de mañana con el tutor. Dime en cuál necesitas ayuda y lo hacemos juntos.";
   }
 
   if (isAskingForApp(lower)) {
     if (!hasDiscussedHomework(history)) {
       if (tomorrowSubjects.length > 0) {
-        return `Antes de usar esa aplicación, primero necesitas repasar los temas de mañana (${getTomorrowDayName()}: ${tomorrowSubjects.join(", ")}). Dime cuál necesitas ayuda y te guío. ¡A las 7 PM ya puedes usar todo libremente!`;
+        return `Primero necesitas estudiar las materias de mañana (${getTomorrowDayName()}: ${tomorrowSubjects.join(", ")}). Cuando termines todas, el entretenimiento se desbloquea solo. ¿Por cuál empezamos?`;
       }
-      return "Antes de usar esa app, dime qué tareas tienes para mañana. Te ayudo con ellas y a las 7 PM tienes tiempo libre para todo.";
+      return "Primero dime qué tareas tienes para mañana. Te ayudo a estudiarlas y cuando termines, el entretenimiento se desbloquea.";
     }
-    return "Sigue un poco más con tus tareas. Recuerda que a las 7 PM se desbloquea todo automáticamente, sin necesidad de que hagas nada.";
+    return "Sigue un poco más con tus tareas. Cuando termines todas las materias de mañana, los juegos y las redes se desbloquean solos.";
   }
 
   const detectedSubject = detectSubject(message, [...todaySubjects, ...tomorrowSubjects, ...ALL_SIMULACRO_SUBJECTS]);

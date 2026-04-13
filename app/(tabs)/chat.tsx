@@ -277,14 +277,16 @@ export default function ChatScreen() {
         <View style={[styles.studyBanner, { backgroundColor: colors.primary + "10", borderBottomColor: colors.primary + "30" }]}>
           <Feather name="info" size={13} color={colors.primary} />
           <Text style={[styles.studyBannerText, { color: colors.primary }]}>
-            El tutor te guia con pistas, no da la respuesta directa
+            {tasksCompleted
+              ? "¡Tareas listas! El entretenimiento está desbloqueado."
+              : "Estudia cada materia de mañana aquí para desbloquear juegos y redes."}
           </Text>
           {!tasksCompleted && (
             <TouchableOpacity
               onPress={() => setTasksCompleted(true)}
               style={[styles.doneBtn, { backgroundColor: colors.success }]}
             >
-              <Text style={styles.doneBtnText}>Termine mis tareas</Text>
+              <Text style={styles.doneBtnText}>Listo</Text>
             </TouchableOpacity>
           )}
         </View>

@@ -317,6 +317,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const appsRef = useRef<MonitoredApp[]>([]);
   const scheduleRef = useRef(schedule);
   const sleepOverrideRef = useRef<number | null>(null);
+  const tasksCompletedRef = useRef(false);
 
   useEffect(() => { scheduleRef.current = schedule; }, [schedule]);
   useEffect(() => { sleepOverrideRef.current = sleepOverrideUntil; }, [sleepOverrideUntil]);
@@ -324,7 +325,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const getEffectiveMode = useCallback(() => {
     const override = sleepOverrideRef.current;
     if (override && Date.now() < override) return "free" as AppMode;
-    return getCurrentMode(scheduleRef.current);
+
+    const base = getCurrentMode(scheduleRef.current);
+
+    // School and sleep modes are never overridden by tasks
+    if (base === "school" || base === "sleep") return base;
+
+    const dayOfWeek = new Date().getDay();
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+
+    if (isWeekday) {
+      // During study or free time: tasks are the ONLY gate for games
+      // If tasks done → free (everything unlocks including games)
+      // If tasks NOT done → study (games and social blocked)
+      if (base === "study" || base === "free") {
+        return tasksCompletedRef.current ? "free" : "study";
+      }
+    }
+
+    return base;
   }, []);
 
   useEffect(() => {
@@ -546,6 +565,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const tomorrowSubjects = getTomorrowSubjects();
   const tasksCompleted = tomorrowSubjects.length === 0
     || tomorrowSubjects.every(s => subjectsDone[s]);
+
+  // Keep ref in sync so getEffectiveMode can read it without closure stale issues
+  tasksCompletedRef.current = tasksCompleted;
+
+  // Re-calculate mode IMMEDIATELY when tasks completion changes
+  // This is what makes the games unlock the moment Jefferson finishes all subjects
+  useEffect(() => {
+    setCurrentMode(getEffectiveMode());
+  }, [tasksCompleted]);
 
   function getUsageContext() {
     const now = new Date();
