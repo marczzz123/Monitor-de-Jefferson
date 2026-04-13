@@ -17,12 +17,9 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="chat">
         <Icon sf={{ default: "bubble.left", selected: "bubble.left.fill" }} />
-        <Label>IA</Label>
+        <Label>IA Tutor</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <Icon sf={{ default: "slider.horizontal.3", selected: "slider.horizontal.3" }} />
-        <Label>Config</Label>
-      </NativeTabs.Trigger>
+      <NativeTabs.Screen name="settings" options={{ href: null }} />
     </NativeTabs>
   );
 }
@@ -70,16 +67,13 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: "IA",
+          title: "IA Tutor",
           tabBarIcon: ({ color }) => <Feather name="message-circle" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
-        options={{
-          title: "Config",
-          tabBarIcon: ({ color }) => <Feather name="sliders" size={22} color={color} />,
-        }}
+        options={{ href: null }}
       />
     </Tabs>
   );
