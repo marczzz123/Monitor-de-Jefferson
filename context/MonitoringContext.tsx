@@ -82,14 +82,88 @@ export const GAME_KEYWORDS = [
   "supercell", "king.com", "gameloft", "ubisoft", "ea.games",
 ];
 
+const SYSTEM_PKG_PREFIXES = [
+  "com.android.",
+  "android.",
+  "com.google.android.",
+  // Samsung
+  "com.samsung.android.",
+  "com.samsung.",
+  "com.sec.android.",
+  "com.sec.",
+  // Xiaomi / MIUI
+  "com.miui.",
+  "com.xiaomi.",
+  // Huawei / Honor
+  "com.huawei.",
+  "com.honor.",
+  "com.hihonor.",
+  // OPPO / Realme / OnePlus
+  "com.oppo.",
+  "com.coloros.",
+  "com.realme.",
+  "com.oneplus.",
+  // Vivo / iQOO
+  "com.vivo.",
+  "com.iqoo.",
+  // ASUS
+  "com.asus.",
+  // Motorola / Lenovo
+  "com.motorola.",
+  "com.lenovo.",
+  // LG
+  "com.lge.",
+  // Sony
+  "com.sonyericsson.",
+  "com.sony.",
+  // HTC
+  "com.htc.",
+  // Qualcomm / MediaTek (chips)
+  "com.qualcomm.",
+  "com.mediatek.",
+];
+
+const SYSTEM_APP_NAMES = [
+  "teléfono", "telefono", "phone", "dialer", "marcador",
+  "contactos", "contacts", "agenda",
+  "mensajes", "messages", "sms", "mms",
+  "configuración", "configuracion", "settings", "ajustes",
+  "calculadora", "calculator",
+  "reloj", "clock", "alarma", "alarm", "temporizador",
+  "cámara", "camara", "camera",
+  "galería", "galeria", "gallery", "fotos", "photos",
+  "archivos", "files", "file manager", "gestor",
+  "notas", "notes",
+  "calendario", "calendar",
+  "linterna", "flashlight",
+  "grabadora", "recorder",
+  "brújula", "compass",
+  "play store", "app store",
+];
+
 export function classifyPackage(packageName: string, appName: string): MonitoredApp["category"] {
   const pkg = packageName.toLowerCase();
   const name = appName.toLowerCase();
+
+  // Social primero (prioridad alta)
   if (SOCIAL_PACKAGES.includes(pkg)) return "social";
-  if (pkg.includes("tiktok") || pkg.includes("instagram") || pkg.includes("snapchat")) return "social";
+  if (pkg.includes("tiktok") || pkg.includes("instagram") || pkg.includes("snapchat")
+    || pkg.includes("facebook") || pkg.includes("twitter") || pkg.includes("whatsapp")) return "social";
+
+  // Juegos
   if (GAME_KEYWORDS.some((k) => pkg.includes(k) || name.includes(k))) return "game";
-  if (pkg.includes("edu") || pkg.includes("learn") || pkg.includes("school") || pkg.includes("math") || pkg.includes("duolingo") || pkg.includes("khan")) return "educational";
-  if (pkg.startsWith("com.android") || pkg.startsWith("com.google.android.")) return "system";
+
+  // Educativas
+  if (pkg.includes("edu") || pkg.includes("learn") || pkg.includes("school")
+    || pkg.includes("math") || pkg.includes("duolingo") || pkg.includes("khan")
+    || pkg.includes("coursera") || pkg.includes("udemy")) return "educational";
+
+  // Sistema: por prefijo de paquete (cubre todas las marcas comunes)
+  if (SYSTEM_PKG_PREFIXES.some(prefix => pkg.startsWith(prefix))) return "system";
+
+  // Sistema: por nombre de app (cubre casos donde el paquete no tiene prefijo claro)
+  if (SYSTEM_APP_NAMES.some(n => name.includes(n))) return "system";
+
   return "neutral";
 }
 
@@ -154,7 +228,7 @@ export function isModeBlocked(mode: AppMode, packageName: string, appName: strin
 
   if (mode === "sleep") return true;
   if (mode === "school") {
-    if (category === "system") return false;
+    if (category === "system" || category === "educational") return false;
     return true;
   }
   if (mode === "lunch") {
