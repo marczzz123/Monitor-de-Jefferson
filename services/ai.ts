@@ -33,7 +33,6 @@ export const ALL_SIMULACRO_SUBJECTS = [
   "Trigonometría",
 ];
 
-// Último simulacro: finales de marzo. El siguiente es aproximadamente cada 2 meses.
 const LAST_SIMULACRO = new Date("2026-03-28");
 const NEXT_SIMULACRO_APPROX = new Date("2026-05-28");
 
@@ -69,6 +68,10 @@ export function getDayName(): string {
   return DAY_NAMES[new Date().getDay()] ?? "hoy";
 }
 
+export function getTomorrowDayName(): string {
+  return DAY_NAMES[(new Date().getDay() + 1) % 7] ?? "mañana";
+}
+
 function getDaysUntilNextSimulacro(): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -97,6 +100,12 @@ export interface AnalyzeResult {
 
 export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
   const category = classifyPackage(data.packageName, data.appName);
+
+  // Las apps del sistema NUNCA generan alertas ni se bloquean
+  if (category === "system") {
+    return { decision: "allow", reason: "App del sistema.", message: "Guardian permite esta app." };
+  }
+
   const isBlocked = isModeBlocked(data.currentMode, data.packageName, data.appName, data.restrictedApps);
 
   if (data.currentMode === "sleep") {
@@ -104,7 +113,7 @@ export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
   }
 
   if (data.currentMode === "school") {
-    if (category === "system" || category === "educational") {
+    if (category === "educational") {
       return { decision: "allow", reason: "Permitida en horario escolar.", message: "Permitida por Guardian." };
     }
     return { decision: "close", reason: `Horario de colegio activo.`, message: "Estás en horario escolar. Concéntrate en clases." };
@@ -124,7 +133,6 @@ export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
   }
 
   if (data.currentMode === "study") {
-    // NUNCA juegos en horario de estudio, sin excepción
     if (category === "game") {
       return {
         decision: "close",
@@ -142,8 +150,8 @@ export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
       }
       return {
         decision: "close",
-        reason: `${data.appName} bloqueada hasta completar tareas o las 7 PM.`,
-        message: "Termina tus tareas para desbloquear redes sociales. Los juegos se habilitan a las 7 PM.",
+        reason: `${data.appName} bloqueada hasta completar tareas de mañana o las 7 PM.`,
+        message: "Termina tus tareas de mañana para desbloquear redes sociales. Los juegos se habilitan a las 7 PM.",
       };
     }
     if (category === "educational") {
@@ -151,9 +159,6 @@ export function localAnalyzeWithMode(data: AnalyzeRequest): AnalyzeResult {
     }
     if (isBlocked) {
       return { decision: "close", reason: "Restringida en modo estudio.", message: "Enfócate en el estudio." };
-    }
-    if (data.usageMinutes >= 45) {
-      return { decision: "warn", reason: "Llevas mucho tiempo.", message: "Toma un descanso de 5 minutos." };
     }
     return { decision: "allow", reason: "Permitida en modo estudio.", message: "Guardian monitorea tu actividad." };
   }
@@ -183,6 +188,131 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+// =============================================
+// RETO NOCTURNO — Preguntas por materia
+// =============================================
+
+const NIGHT_CHALLENGE_QUESTIONS: Record<string, Array<{ q: string; a: string; hint: string }>> = {
+  "Álgebra": [
+    { q: "Resuelve: 2x + 6 = 14. ¿Cuánto vale x?", a: "4", hint: "Resta 6 a ambos lados: 2x = 8, luego divide entre 2" },
+    { q: "Si y = 3x - 5 y x = 4, ¿cuánto es y?", a: "7", hint: "Sustituye x=4: y = 3(4) - 5 = 12 - 5" },
+    { q: "Despeja x: x/3 + 2 = 5", a: "9", hint: "Resta 2: x/3 = 3, luego multiplica por 3" },
+  ],
+  "Aritmética": [
+    { q: "¿Cuánto es el 20% de 150?", a: "30", hint: "20% = 0.20. Multiplica 150 × 0.20" },
+    { q: "¿Cuánto es 3/4 + 1/2?", a: "5/4", hint: "Denominador común 4: 3/4 + 2/4 = 5/4" },
+    { q: "¿Cuánto es el MCM de 6 y 4?", a: "12", hint: "Múltiplos de 6: 6, 12. Múltiplos de 4: 4, 8, 12. El menor común es..." },
+  ],
+  "Química": [
+    { q: "¿Cuál es el símbolo químico del Oxígeno?", a: "O", hint: "Es el elemento número 8 de la tabla periódica" },
+    { q: "¿Cuántos átomos tiene la molécula de agua H₂O?", a: "3", hint: "2 hidrógenos + 1 oxígeno = ?" },
+    { q: "¿Qué tipo de enlace se forma entre metales y no metales?", a: "iónico", hint: "Cuando uno cede y otro gana electrones" },
+  ],
+  "Geometría": [
+    { q: "¿Cuánto mide el área de un cuadrado de lado 5 cm?", a: "25", hint: "Área = lado × lado = 5 × 5" },
+    { q: "¿Cuántos grados suman los ángulos interiores de un triángulo?", a: "180", hint: "Regla básica de geometría" },
+    { q: "¿Cuánto es el perímetro de un rectángulo de 6 cm x 4 cm?", a: "20", hint: "P = 2 × (largo + ancho) = 2 × (6 + 4)" },
+  ],
+  "Geografía": [
+    { q: "¿Cuántos departamentos tiene el Perú?", a: "25", hint: "También llamadas regiones" },
+    { q: "¿Cuál es el río más largo del Perú?", a: "el Amazonas", hint: "También es el río más largo del mundo" },
+    { q: "¿En qué continente está el Perú?", a: "América del Sur", hint: "Es el continente del hemisferio occidental" },
+  ],
+  "Inglés": [
+    { q: "¿Cómo se dice 'manzana' en inglés?", a: "apple", hint: "Es una fruta roja o verde muy común" },
+    { q: "Completa: Yesterday I ___ to school. (go)", a: "went", hint: "El pasado irregular de 'go' es 'went'" },
+    { q: "¿Cómo se dice 'hoy' en inglés?", a: "today", hint: "Piensa en 'today, tomorrow, yesterday'" },
+  ],
+  "Historia del Perú": [
+    { q: "¿En qué año se proclamó la independencia del Perú?", a: "1821", hint: "28 de julio, proclamada por San Martín" },
+    { q: "¿Quién fue el primer Inca del Tawantinsuyo?", a: "Manco Cápac", hint: "Según la leyenda, salió del lago Titicaca" },
+    { q: "¿En qué siglo llegaron los españoles al Perú?", a: "XVI o siglo 16", hint: "Francisco Pizarro llegó en 1532" },
+  ],
+  "Lenguaje": [
+    { q: "¿Cuál es el sujeto en 'El perro corre en el parque'?", a: "El perro", hint: "El sujeto es quien realiza la acción" },
+    { q: "¿Qué tipo de palabra es 'rápidamente'?", a: "adverbio", hint: "Modifica al verbo, adjetivo u otro adverbio" },
+    { q: "¿Cuántas sílabas tiene la palabra 'mariposa'?", a: "4", hint: "Ma-ri-po-sa" },
+  ],
+  "Literatura": [
+    { q: "¿Quién escribió 'Cien años de soledad'?", a: "Gabriel García Márquez", hint: "Es un escritor colombiano, ganador del Nobel" },
+    { q: "¿En qué género literario predomina la poesía?", a: "lírico", hint: "Los géneros literarios son épico, lírico y dramático" },
+  ],
+  "Razonamiento Matemático": [
+    { q: "¿Cuál sigue en la serie: 2, 4, 8, 16...?", a: "32", hint: "Cada número se multiplica por 2" },
+    { q: "Si hay 12 manzanas y comes 1/3, ¿cuántas quedan?", a: "8", hint: "1/3 de 12 = 4. Resta 12 - 4" },
+  ],
+  "Razonamiento Verbal": [
+    { q: "¿Cuál es el sinónimo de 'veloz'?", a: "rápido", hint: "Significa que se mueve a gran velocidad" },
+    { q: "¿Cuál es el antónimo de 'oscuro'?", a: "claro", hint: "Lo contrario a sin luz es..." },
+  ],
+  "Biología": [
+    { q: "¿Cuántos cromosomas tiene una célula humana normal?", a: "46", hint: "Son 23 pares de cromosomas" },
+    { q: "¿Cómo se llama el proceso por el que las plantas hacen su alimento?", a: "fotosíntesis", hint: "Las plantas usan la luz del sol y CO₂" },
+  ],
+  "Historia Universal": [
+    { q: "¿En qué año comenzó la Primera Guerra Mundial?", a: "1914", hint: "Empezó tras el asesinato del Archiduque Francisco Fernando" },
+    { q: "¿En qué país ocurrió la Revolución Francesa?", a: "Francia", hint: "Ocurrió en 1789" },
+  ],
+  "Trigonometría": [
+    { q: "¿Cuánto es sen(30°)?", a: "0.5", hint: "Es uno de los ángulos notables: sen 30° = 1/2" },
+    { q: "¿Cuánto es cos(0°)?", a: "1", hint: "En el ángulo 0, el coseno vale su máximo" },
+  ],
+  "Ed. Cívica": [
+    { q: "¿Cuántos poderes tiene el Estado peruano?", a: "3", hint: "Ejecutivo, Legislativo y Judicial" },
+    { q: "¿Cuántos años dura el mandato presidencial en el Perú?", a: "5", hint: "No tiene reelección inmediata" },
+  ],
+  "Religión": [
+    { q: "¿Cuántos mandamientos hay en el Antiguo Testamento?", a: "10", hint: "Los Diez Mandamientos fueron dados a Moisés" },
+    { q: "¿Qué significa 'Evangelio'?", a: "Buena nueva", hint: "Viene del griego 'euangelion'" },
+  ],
+  "Cómputo": [
+    { q: "¿Cuántos bits tiene un byte?", a: "8", hint: "Es una medida básica de información digital" },
+    { q: "¿Qué significa CPU?", a: "Central Processing Unit", hint: "Es el 'cerebro' de la computadora" },
+  ],
+};
+
+export interface NightChallenge {
+  question: string;
+  hint: string;
+  subject: string;
+  correctAnswer: string;
+}
+
+export function generateNightChallengeQuestion(subjects: string[]): NightChallenge {
+  const available = subjects.filter(s => NIGHT_CHALLENGE_QUESTIONS[s]);
+
+  if (available.length === 0) {
+    return {
+      question: "¿Cuánto es 7 × 8?",
+      hint: "Es la tabla del 7 o del 8",
+      subject: "Matemáticas",
+      correctAnswer: "56",
+    };
+  }
+
+  const subject = available[Math.floor(Math.random() * available.length)];
+  const questions = NIGHT_CHALLENGE_QUESTIONS[subject];
+  const q = questions[Math.floor(Math.random() * questions.length)];
+  return { question: q.q, hint: q.hint, subject, correctAnswer: q.a };
+}
+
+export function checkNightChallengeAnswer(correctAnswer: string, userAnswer: string): boolean {
+  const normalize = (s: string) =>
+    s.toLowerCase().trim()
+      .replace(/[°.,\s]/g, "")
+      .replace(/á/g, "a").replace(/é/g, "e").replace(/í/g, "i")
+      .replace(/ó/g, "o").replace(/ú/g, "u");
+  const correct = normalize(correctAnswer);
+  const user = normalize(userAnswer);
+  if (correct === user) return true;
+  const parts = correctAnswer.split(/\s*o\s*/i);
+  return parts.some(p => normalize(p) === user);
+}
+
+// =============================================
+// Chat y análisis
+// =============================================
 
 function isAskingForApp(lower: string): boolean {
   return (
@@ -241,7 +371,7 @@ function hasDiscussedHomework(history: ChatMessage[]): boolean {
   return userMsgs.some(msg => keywords.some(kw => msg.includes(kw)));
 }
 
-function detectSubject(message: string, subjects: string[]): string | null {
+export function detectSubject(message: string, subjects: string[]): string | null {
   const lower = message.toLowerCase();
   for (const sub of subjects) {
     if (lower.includes(sub.toLowerCase())) return sub;
@@ -358,7 +488,7 @@ function getSimulacroResponse(message: string, history: ChatMessage[]): string {
   const detectedSubject = detectSubject(message, ALL_SIMULACRO_SUBJECTS);
 
   if (detectedSubject) {
-    return `Para el simulacro en ${subject_area(detectedSubject)}, recuerda repasar los conceptos clave. ${getSubjectHint(detectedSubject, message, turnCount)} ¿Quieres que repasemos otro tema del simulacro también?`;
+    return `Para el simulacro en ${detectedSubject}, recuerda repasar los conceptos clave. ${getSubjectHint(detectedSubject, message, turnCount)} ¿Quieres que repasemos otro tema del simulacro también?`;
   }
 
   if (lower.includes("cuándo") || lower.includes("cuando") || lower.includes("fecha") || lower.includes("falta")) {
@@ -374,14 +504,6 @@ function getSimulacroResponse(message: string, history: ChatMessage[]): string {
   }
 
   return `Para preparar el simulacro, lo mejor es repasar poco a poco cada materia. ¿Cuál te genera más dudas: las matemáticas (Álgebra, Aritmética, Geometría, Trigonometría), las ciencias (Biología, Química) o las humanidades (Historia, Geografía, Literatura)?`;
-}
-
-function subject_area(subject: string): string {
-  const sub = subject.toLowerCase();
-  if (["álgebra", "aritmética", "trigonometría", "geometría", "razonamiento matemático"].some(s => sub.includes(s))) return "Matemáticas";
-  if (sub.includes("biolog") || sub.includes("quimic")) return "Ciencias";
-  if (sub.includes("histor") || sub.includes("geograf")) return "Ciencias Sociales";
-  return subject;
 }
 
 function localStudyTutor(message: string, history: ChatMessage[]): string {
@@ -402,15 +524,15 @@ function localStudyTutor(message: string, history: ChatMessage[]): string {
 
   if (isAskingForApp(lower)) {
     if (!hasDiscussedHomework(history)) {
-      if (todaySubjects.length > 0) {
-        return `Antes de usar esa aplicación, dame los temas de cada materia que tienes hoy (${dayName}: ${todaySubjects.join(", ")}) para ayudarte con tus tareas. Recuerda que no te daré la respuesta directa, te daré ejemplos similares para que aprendas. ¡A las 7 PM ya puedes usar todo libremente!`;
+      if (tomorrowSubjects.length > 0) {
+        return `Antes de usar esa aplicación, primero necesitas repasar los temas de mañana (${getTomorrowDayName()}: ${tomorrowSubjects.join(", ")}). Dime cuál necesitas ayuda y te guío. ¡A las 7 PM ya puedes usar todo libremente!`;
       }
-      return "Antes de usar esa app, dime qué tareas tienes hoy. Te ayudo con ellas y a las 7 PM tienes tiempo libre para todo.";
+      return "Antes de usar esa app, dime qué tareas tienes para mañana. Te ayudo con ellas y a las 7 PM tienes tiempo libre para todo.";
     }
     return "Sigue un poco más con tus tareas. Recuerda que a las 7 PM se desbloquea todo automáticamente, sin necesidad de que hagas nada.";
   }
 
-  const detectedSubject = detectSubject(message, [...todaySubjects, ...ALL_SIMULACRO_SUBJECTS]);
+  const detectedSubject = detectSubject(message, [...todaySubjects, ...tomorrowSubjects, ...ALL_SIMULACRO_SUBJECTS]);
 
   const isAskingDirect =
     lower.includes("respuesta") ||
@@ -457,7 +579,7 @@ function localStudyTutor(message: string, history: ChatMessage[]): string {
 
   if (turnCount === 0) {
     const tomorrowReminder = tomorrowSubjects.length > 0
-      ? ` Mañana también tienes: ${tomorrowSubjects.join(", ")}, así que si terminas rápido puedes adelantar algo.`
+      ? ` Mañana (${getTomorrowDayName()}) tienes: ${tomorrowSubjects.join(", ")}. Necesitas repasar cada una para desbloquear el entretenimiento.`
       : "";
     if (todaySubjects.length > 0) {
       return `Hola Jefferson! Hoy es ${dayName} y tienes: ${todaySubjects.join(", ")}. ¿En cuál necesitas ayuda? No te daré las respuestas, pero sí buenas pistas. A las 7 PM tienes tiempo libre para juegos y redes.${tomorrowReminder}`;

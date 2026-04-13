@@ -10,6 +10,7 @@ import {
   stopMonitoringService,
   type DeviceAppInfo,
 } from "@/services/deviceApps";
+import { getTodaySubjects, getTomorrowSubjects } from "@/services/ai";
 
 export type AppDecision = "allow" | "warn" | "close";
 export type AppMode = "school" | "lunch" | "study" | "free" | "sleep";
@@ -91,39 +92,28 @@ const SYSTEM_PKG_PREFIXES = [
   "com.android.",
   "android.",
   "com.google.android.",
-  // Samsung
   "com.samsung.android.",
   "com.samsung.",
   "com.sec.android.",
   "com.sec.",
-  // Xiaomi / MIUI
   "com.miui.",
   "com.xiaomi.",
-  // Huawei / Honor
   "com.huawei.",
   "com.honor.",
   "com.hihonor.",
-  // OPPO / Realme / OnePlus
   "com.oppo.",
   "com.coloros.",
   "com.realme.",
   "com.oneplus.",
-  // Vivo / iQOO
   "com.vivo.",
   "com.iqoo.",
-  // ASUS
   "com.asus.",
-  // Motorola / Lenovo
   "com.motorola.",
   "com.lenovo.",
-  // LG
   "com.lge.",
-  // Sony
   "com.sonyericsson.",
   "com.sony.",
-  // HTC
   "com.htc.",
-  // Qualcomm / MediaTek (chips)
   "com.qualcomm.",
   "com.mediatek.",
 ];
@@ -150,23 +140,18 @@ export function classifyPackage(packageName: string, appName: string): Monitored
   const pkg = packageName.toLowerCase();
   const name = appName.toLowerCase();
 
-  // Social primero (prioridad alta)
   if (SOCIAL_PACKAGES.includes(pkg)) return "social";
   if (pkg.includes("tiktok") || pkg.includes("instagram") || pkg.includes("snapchat")
     || pkg.includes("facebook") || pkg.includes("twitter") || pkg.includes("whatsapp")) return "social";
 
-  // Juegos
   if (GAME_KEYWORDS.some((k) => pkg.includes(k) || name.includes(k))) return "game";
 
-  // Educativas
   if (pkg.includes("edu") || pkg.includes("learn") || pkg.includes("school")
     || pkg.includes("math") || pkg.includes("duolingo") || pkg.includes("khan")
     || pkg.includes("coursera") || pkg.includes("udemy")) return "educational";
 
-  // Sistema: por prefijo de paquete (cubre todas las marcas comunes)
   if (SYSTEM_PKG_PREFIXES.some(prefix => pkg.startsWith(prefix))) return "system";
 
-  // Sistema: por nombre de app (cubre casos donde el paquete no tiene prefijo claro)
   if (SYSTEM_APP_NAMES.some(n => name.includes(n))) return "system";
 
   return "neutral";
@@ -174,16 +159,13 @@ export function classifyPackage(packageName: string, appName: string): Monitored
 
 export function getCurrentMode(schedule: Schedule): AppMode {
   const now = new Date();
-  const day = now.getDay(); // 0=Dom, 1=Lun, ..., 5=Vie, 6=Sab
+  const day = now.getDay();
   const hour = now.getHours();
   const min = now.getMinutes();
   const totalMin = hour * 60 + min;
 
-  const isWeekend = day === 0 || day === 6; // Sábado o Domingo
+  const isWeekend = day === 0 || day === 6;
 
-  // Hora de dormir dinámica para garantizar 7-8 horas de sueño:
-  // Noche de viernes (day=5) y noche de sábado (day=6): 23:30 (puede dormir más)
-  // Noches de escuela (dom-jue): hora configurada (por defecto 22:00)
   const isFridayOrSaturdayNight = day === 5 || day === 6;
   const sleepTotal = isFridayOrSaturdayNight
     ? 23 * 60 + 30
@@ -191,10 +173,8 @@ export function getCurrentMode(schedule: Schedule): AppMode {
 
   if (totalMin >= sleepTotal) return "sleep";
 
-  // Fines de semana: modo libre todo el día
   if (isWeekend) return "free";
 
-  // Días de semana (Lun-Vie): aplicar horario escolar
   const schoolStart = schedule.schoolStart * 60 + (schedule.schoolStartMin ?? 0);
   const schoolEnd = schedule.schoolEnd * 60 + (schedule.schoolEndMin ?? 0);
   const lunchEnd = schedule.lunchEnd * 60 + (schedule.lunchEndMin ?? 0);
@@ -204,7 +184,6 @@ export function getCurrentMode(schedule: Schedule): AppMode {
   if (totalMin >= schoolEnd && totalMin < lunchEnd) return "lunch";
   if (totalMin >= lunchEnd && totalMin < gamesStart) return "study";
 
-  // Después de gamesStart (19:00) hasta dormir: modo libre (juegos y redes permitidos)
   return "free";
 }
 
@@ -263,6 +242,8 @@ interface MonitoringContextType {
   schedule: Schedule;
   sensitivity: number;
   tasksCompleted: boolean;
+  subjectsDone: Record<string, boolean>;
+  sleepOverrideUntil: number | null;
   toggleMonitoring: () => void;
   toggleRestrictedApp: (packageName: string) => void;
   updateSchedule: (schedule: Schedule) => void;
@@ -270,6 +251,9 @@ interface MonitoringContextType {
   addAction: (action: AIAction) => void;
   addBlockAttempt: (attempt: Omit<BlockAttempt, "id">) => void;
   setTasksCompleted: (done: boolean) => void;
+  markSubjectDone: (subject: string) => void;
+  resetSubjectsDone: () => void;
+  grantNightExtraTime: () => void;
   getUsageContext: () => Record<string, unknown>;
   allApps: MonitoredApp[];
   refreshInstalledApps: () => Promise<void>;
@@ -299,6 +283,11 @@ function getEffectiveRestrictedApps(apps: MonitoredApp[], restrictedApps: string
   return [...packages];
 }
 
+function getTodayDateKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 export function MonitoringProvider({ children }: { children: React.ReactNode }) {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [currentApp, setCurrentApp] = useState<MonitoredApp | null>(null);
@@ -308,7 +297,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [blockAttempts, setBlockAttempts] = useState<BlockAttempt[]>([]);
   const [restrictedApps, setRestrictedApps] = useState<string[]>([]);
   const [allApps, setAllApps] = useState<MonitoredApp[]>([]);
-  const [tasksCompleted, setTasksCompleted] = useState(false);
+  const [subjectsDone, setSubjectsDone] = useState<Record<string, boolean>>({});
+  const [sleepOverrideUntil, setSleepOverrideUntil] = useState<number | null>(null);
   const [schedule, setSchedule] = useState<Schedule>({
     schoolStart: 7,
     schoolStartMin: 20,
@@ -326,19 +316,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const modeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appsRef = useRef<MonitoredApp[]>([]);
   const scheduleRef = useRef(schedule);
+  const sleepOverrideRef = useRef<number | null>(null);
 
   useEffect(() => { scheduleRef.current = schedule; }, [schedule]);
+  useEffect(() => { sleepOverrideRef.current = sleepOverrideUntil; }, [sleepOverrideUntil]);
+
+  const getEffectiveMode = useCallback(() => {
+    const override = sleepOverrideRef.current;
+    if (override && Date.now() < override) return "free" as AppMode;
+    return getCurrentMode(scheduleRef.current);
+  }, []);
 
   useEffect(() => {
     loadData();
     refreshInstalledApps();
-    const mode = getCurrentMode(scheduleRef.current);
-    setCurrentMode(mode);
-    // Auto-inicia el monitoreo al abrir la app
+    setCurrentMode(getEffectiveMode());
     setIsMonitoring(true);
     startMonitoringService().catch(() => {});
     modeIntervalRef.current = setInterval(() => {
-      setCurrentMode(getCurrentMode(scheduleRef.current));
+      setCurrentMode(getEffectiveMode());
     }, 30000);
     return () => {
       if (modeIntervalRef.current) clearInterval(modeIntervalRef.current);
@@ -379,6 +375,18 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         if (typeof data.sensitivity === "number") setSensitivity(data.sensitivity);
         if (data.recentActions) setRecentActions(data.recentActions.slice(0, 20));
         if (data.blockAttempts) setBlockAttempts(data.blockAttempts.slice(0, 30));
+
+        // Load subjectsDone but reset if it's a new day
+        const todayKey = getTodayDateKey();
+        if (data.subjectsDoneDate === todayKey && data.subjectsDone) {
+          setSubjectsDone(data.subjectsDone);
+        }
+
+        // Load sleepOverride but ignore if expired
+        if (data.sleepOverrideUntil && Date.now() < data.sleepOverrideUntil) {
+          setSleepOverrideUntil(data.sleepOverrideUntil);
+          sleepOverrideRef.current = data.sleepOverrideUntil;
+        }
       }
     } catch {}
   }
@@ -442,7 +450,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setIsMonitoring((prev) => {
       const next = !prev;
       if (next) {
-        const effectiveRestrictedApps = getEffectiveRestrictedApps(appsRef.current, restrictedApps, getCurrentMode(scheduleRef.current));
+        const effectiveRestrictedApps = getEffectiveRestrictedApps(appsRef.current, restrictedApps, getEffectiveMode());
         setNativeRestrictedApps(effectiveRestrictedApps).catch(() => {});
         startMonitoringService().catch(() => {});
       } else {
@@ -458,7 +466,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         ? prev.filter((p) => p !== packageName)
         : [...prev, packageName];
       saveData({ restrictedApps: next });
-      const effective = getEffectiveRestrictedApps(appsRef.current, next, getCurrentMode(scheduleRef.current));
+      const effective = getEffectiveRestrictedApps(appsRef.current, next, getEffectiveMode());
       setNativeRestrictedApps(effective).catch(() => {});
       return next;
     });
@@ -467,7 +475,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   function updateSchedule(s: Schedule) {
     setSchedule(s);
     scheduleRef.current = s;
-    setCurrentMode(getCurrentMode(s));
+    setCurrentMode(getEffectiveMode());
     saveData({ schedule: s });
   }
 
@@ -497,6 +505,48 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     });
   }
 
+  function markSubjectDone(subject: string) {
+    setSubjectsDone((prev) => {
+      const next = { ...prev, [subject]: true };
+      saveData({ subjectsDone: next, subjectsDoneDate: getTodayDateKey() });
+      return next;
+    });
+  }
+
+  function resetSubjectsDone() {
+    setSubjectsDone({});
+    saveData({ subjectsDone: {}, subjectsDoneDate: getTodayDateKey() });
+  }
+
+  function setTasksCompleted(done: boolean) {
+    if (done) {
+      const tomorrow = getTomorrowSubjects();
+      const allDone: Record<string, boolean> = {};
+      for (const s of tomorrow) allDone[s] = true;
+      setSubjectsDone(allDone);
+      saveData({ subjectsDone: allDone, subjectsDoneDate: getTodayDateKey() });
+    } else {
+      resetSubjectsDone();
+    }
+  }
+
+  function grantNightExtraTime() {
+    const until = Date.now() + 10 * 60 * 1000;
+    setSleepOverrideUntil(until);
+    sleepOverrideRef.current = until;
+    setCurrentMode("free");
+    saveData({ sleepOverrideUntil: until });
+    setTimeout(() => {
+      setSleepOverrideUntil(null);
+      sleepOverrideRef.current = null;
+      setCurrentMode(getCurrentMode(scheduleRef.current));
+    }, 10 * 60 * 1000);
+  }
+
+  const tomorrowSubjects = getTomorrowSubjects();
+  const tasksCompleted = tomorrowSubjects.length === 0
+    || tomorrowSubjects.every(s => subjectsDone[s]);
+
   function getUsageContext() {
     const now = new Date();
     const hour = now.getHours();
@@ -514,6 +564,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       horario_escolar: isSchoolHours,
       hora_dormir: isNightTime,
       tareas_completadas: tasksCompleted,
+      materias_mañana: tomorrowSubjects,
+      materias_completadas: Object.keys(subjectsDone).filter(k => subjectsDone[k]),
       apps_instaladas_detectadas: allApps.length,
       apps_restringidas: restrictedApps.length,
       uso_hoy: todayUsage.map((u) => ({
@@ -544,6 +596,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         schedule,
         sensitivity,
         tasksCompleted,
+        subjectsDone,
+        sleepOverrideUntil,
         toggleMonitoring,
         toggleRestrictedApp,
         updateSchedule,
@@ -551,6 +605,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         addAction,
         addBlockAttempt,
         setTasksCompleted,
+        markSubjectDone,
+        resetSubjectsDone,
+        grantNightExtraTime,
         getUsageContext,
         allApps,
         refreshInstalledApps,

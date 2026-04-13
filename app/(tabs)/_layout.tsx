@@ -15,6 +15,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "shield", selected: "shield.fill" }} />
         <Label>Monitor</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="tasks">
+        <Icon sf={{ default: "checklist", selected: "checklist" }} />
+        <Label>Tareas</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="chat">
         <Icon sf={{ default: "bubble.left", selected: "bubble.left.fill" }} />
         <Label>IA Tutor</Label>
@@ -62,6 +66,13 @@ function ClassicTabLayout() {
         options={{
           title: "Monitor",
           tabBarIcon: ({ color }) => <Feather name="shield" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          title: "Tareas",
+          tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} />,
         }}
       />
       <Tabs.Screen

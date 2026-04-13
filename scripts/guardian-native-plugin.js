@@ -409,6 +409,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -422,6 +423,7 @@ public class GuardianAccessibilityService extends AccessibilityService {
   private static final String MODE_KEY = "current_mode";
   private long lastBlockAt = 0;
   private String lastBlockedPackage = "";
+  private long lastAiBlockAt = 0;
 
   // Apps sociales permitidas en modo almuerzo (TikTok e Instagram)
   private static final List<String> LUNCH_ALLOWED = Arrays.asList(
@@ -452,11 +454,48 @@ public class GuardianAccessibilityService extends AccessibilityService {
     "com.qualcomm.", "com.mediatek."
   };
 
+  // Navegadores web conocidos
+  private static final String[] BROWSER_PACKAGES = {
+    "com.android.chrome",
+    "com.chrome.beta",
+    "com.chrome.dev",
+    "com.chrome.canary",
+    "org.mozilla.firefox",
+    "com.opera.browser",
+    "com.opera.mini.native",
+    "com.microsoft.emmx",
+    "com.brave.browser",
+    "com.sec.android.app.sbrowser",
+    "com.huawei.browser",
+    "com.mi.globalbrowser",
+    "com.duckduckgo.mobile.android"
+  };
+
+  // Sitios de IA bloqueados siempre (independiente del modo)
+  private static final String[] BLOCKED_AI_DOMAINS = {
+    "chatgpt.com",
+    "chat.openai.com",
+    "openai.com/chat",
+    "gemini.google.com",
+    "bard.google.com",
+    "claude.ai",
+    "copilot.microsoft.com",
+    "bing.com/chat",
+    "perplexity.ai",
+    "character.ai",
+    "poe.com",
+    "you.com",
+    "phind.com",
+    "blackbox.ai"
+  };
+
   @Override
   public void onAccessibilityEvent(AccessibilityEvent event) {
     if (event == null || event.getPackageName() == null) return;
     int type = event.getEventType();
-    if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
+    if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED
+        && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return;
 
     SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     if (!prefs.getBoolean(MONITORING_KEY, false)) return;
@@ -464,8 +503,23 @@ public class GuardianAccessibilityService extends AccessibilityService {
     String packageName = event.getPackageName().toString();
     if (packageName.equals(getPackageName())) return;
 
-    // Apps del sistema nunca se bloquean
+    // Verificar si es un navegador y si la URL es un sitio de IA bloqueado
+    if (isBrowser(packageName)) {
+      if (isAiSiteOpen(event, packageName)) {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastAiBlockAt > 2000) {
+          lastAiBlockAt = now;
+          performGlobalAction(GLOBAL_ACTION_HOME);
+        }
+        return;
+      }
+    }
+
+    // Apps del sistema nunca se bloquean por modo
     if (isSystemApp(packageName)) return;
+
+    // Solo procesamos cambios de ventana para el bloqueo de apps
+    if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
 
     String mode = prefs.getString(MODE_KEY, "free");
     Set<String> restricted = new HashSet<>(prefs.getStringSet(RESTRICTED_KEY, Collections.<String>emptySet()));
@@ -473,23 +527,17 @@ public class GuardianAccessibilityService extends AccessibilityService {
     boolean shouldBlock = false;
 
     if ("sleep".equals(mode)) {
-      // Modo dormir: bloquear todo
       shouldBlock = true;
     } else if ("school".equals(mode)) {
-      // Modo colegio: solo sistema y educativas permitidas
-      // La lista restricted ya contiene lo que JS calculó; la usamos como verdad
       shouldBlock = restricted.contains(packageName);
     } else if ("lunch".equals(mode)) {
-      // Modo almuerzo: SOLO TikTok e Instagram. Todo lo demás bloqueado.
       boolean isLunchAllowed = LUNCH_ALLOWED.contains(packageName);
       if (!isLunchAllowed) {
         shouldBlock = true;
       }
     } else if ("study".equals(mode)) {
-      // Modo estudio: juegos y redes sociales bloqueados
       shouldBlock = restricted.contains(packageName) || isGameApp(packageName);
     } else {
-      // Modo libre: solo lo que JS marcó manualmente
       shouldBlock = restricted.contains(packageName);
     }
 
@@ -504,6 +552,78 @@ public class GuardianAccessibilityService extends AccessibilityService {
 
   @Override
   public void onInterrupt() {}
+
+  private boolean isBrowser(String packageName) {
+    for (String b : BROWSER_PACKAGES) {
+      if (b.equals(packageName)) return true;
+    }
+    return false;
+  }
+
+  private boolean isAiSiteOpen(AccessibilityEvent event, String packageName) {
+    // Intento 1: leer texto del evento
+    String eventText = extractTextFromEvent(event);
+    if (eventText != null && containsAiDomain(eventText)) return true;
+
+    // Intento 2: recorrer el árbol de nodos de accesibilidad para encontrar la barra de URL
+    try {
+      AccessibilityNodeInfo root = getRootInActiveWindow();
+      if (root != null) {
+        String url = findUrlInNodeTree(root);
+        root.recycle();
+        if (url != null && containsAiDomain(url)) return true;
+      }
+    } catch (Exception ignored) {}
+
+    return false;
+  }
+
+  private String extractTextFromEvent(AccessibilityEvent event) {
+    if (event.getText() != null && !event.getText().isEmpty()) {
+      StringBuilder sb = new StringBuilder();
+      for (CharSequence t : event.getText()) {
+        if (t != null) sb.append(t).append(" ");
+      }
+      return sb.toString().toLowerCase();
+    }
+    if (event.getContentDescription() != null) {
+      return event.getContentDescription().toString().toLowerCase();
+    }
+    return null;
+  }
+
+  private String findUrlInNodeTree(AccessibilityNodeInfo node) {
+    if (node == null) return null;
+    // Buscar nodos que contengan un dominio bloqueado en su texto
+    CharSequence text = node.getText();
+    if (text != null) {
+      String t = text.toString().toLowerCase();
+      if (containsAiDomain(t)) return t;
+    }
+    CharSequence desc = node.getContentDescription();
+    if (desc != null) {
+      String d = desc.toString().toLowerCase();
+      if (containsAiDomain(d)) return d;
+    }
+    for (int i = 0; i < node.getChildCount(); i++) {
+      AccessibilityNodeInfo child = node.getChild(i);
+      if (child != null) {
+        String result = findUrlInNodeTree(child);
+        child.recycle();
+        if (result != null) return result;
+      }
+    }
+    return null;
+  }
+
+  private boolean containsAiDomain(String text) {
+    if (text == null) return false;
+    String lower = text.toLowerCase();
+    for (String domain : BLOCKED_AI_DOMAINS) {
+      if (lower.contains(domain)) return true;
+    }
+    return false;
+  }
 
   private boolean isSystemApp(String packageName) {
     for (String prefix : SYSTEM_PREFIXES) {
@@ -545,10 +665,10 @@ public class GuardianBootReceiver extends BroadcastReceiver {
 
 const accessibilityConfig = `<?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged|typeWindowContentChanged"
   android:accessibilityFeedbackType="feedbackGeneric"
-  android:accessibilityFlags="flagReportViewIds"
-  android:canRetrieveWindowContent="false"
+  android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
+  android:canRetrieveWindowContent="true"
   android:canPerformGestures="false"
   android:description="@string/guardian_accessibility_description"
   android:notificationTimeout="100" />
