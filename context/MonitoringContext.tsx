@@ -93,22 +93,35 @@ export function classifyPackage(packageName: string, appName: string): Monitored
 
 export function getCurrentMode(schedule: Schedule): AppMode {
   const now = new Date();
-  const day = now.getDay();
+  const day = now.getDay(); // 0=Dom, 1=Lun, ..., 5=Vie, 6=Sab
   const hour = now.getHours();
   const min = now.getMinutes();
   const totalMin = hour * 60 + min;
 
+  const isWeekend = day === 0 || day === 6; // Sábado o Domingo
+
+  // Hora de dormir dinámica para garantizar 7-8 horas de sueño:
+  // Noche de viernes (day=5) y noche de sábado (day=6): 23:30 (puede dormir más)
+  // Noches de escuela (dom-jue): hora configurada (por defecto 22:00)
+  const isFridayOrSaturdayNight = day === 5 || day === 6;
+  const sleepTotal = isFridayOrSaturdayNight
+    ? 23 * 60 + 30
+    : schedule.bedtime * 60 + (schedule.bedtimeMin ?? 0);
+
+  if (totalMin >= sleepTotal) return "sleep";
+
+  // Fines de semana: modo libre todo el día
+  if (isWeekend) return "free";
+
+  // Días de semana (Lun-Vie): aplicar horario escolar
   const schoolStart = schedule.schoolStart * 60 + (schedule.schoolStartMin ?? 0);
-  const schoolEnd = schedule.schoolEnd * 60 + (schedule.schoolEndMin ?? 30);
-  const lunchEnd = schedule.lunchEnd * 60 + (schedule.lunchEndMin ?? 30);
-  const bedtime = schedule.bedtime * 60 + (schedule.bedtimeMin ?? 0);
+  const schoolEnd = schedule.schoolEnd * 60 + (schedule.schoolEndMin ?? 0);
+  const lunchEnd = schedule.lunchEnd * 60 + (schedule.lunchEndMin ?? 0);
+  const studyEnd = schedule.bedtime * 60 + (schedule.bedtimeMin ?? 0);
 
-  if (totalMin >= bedtime) return "sleep";
-
-  const isWeekday = day >= 1 && day <= 5;
-  if (isWeekday && totalMin >= schoolStart && totalMin < schoolEnd) return "school";
-  if (isWeekday && totalMin >= schoolEnd && totalMin < lunchEnd) return "lunch";
-  if (isWeekday && totalMin >= lunchEnd && totalMin < bedtime) return "study";
+  if (totalMin >= schoolStart && totalMin < schoolEnd) return "school";
+  if (totalMin >= schoolEnd && totalMin < lunchEnd) return "lunch";
+  if (totalMin >= lunchEnd && totalMin < studyEnd) return "study";
 
   return "free";
 }
@@ -209,7 +222,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     schoolEndMin: 30,
     lunchEnd: 15,
     lunchEndMin: 30,
-    bedtime: 21,
+    bedtime: 22,
     bedtimeMin: 0,
   });
   const [sensitivity, setSensitivity] = useState(2);
