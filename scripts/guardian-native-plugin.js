@@ -316,8 +316,13 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
       intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent);
       intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
         "Guardian necesita ser Administrador de dispositivo para proteger el control parental y evitar que se desinstale sin permiso.");
-      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-      reactContext.startActivity(intent);
+      android.app.Activity currentActivity = getCurrentActivity();
+      if (currentActivity != null) {
+        currentActivity.startActivity(intent);
+      } else {
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        reactContext.startActivity(intent);
+      }
       promise.resolve(true);
     } catch (Exception e) {
       promise.reject("DEVICE_ADMIN_ERROR", e);
