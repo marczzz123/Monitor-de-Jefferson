@@ -1,7 +1,7 @@
 import type { AppMode } from "@/context/MonitoringContext";
 import { classifyPackage, isModeBlocked } from "@/context/MonitoringContext";
 
-const DEFAULT_DOMAIN = "5584a7e1-215c-4bd4-afeb-2a886c0eb982-00-o3271iwwn0n2.spock.replit.dev";
+const DEFAULT_DOMAIN = "65ae1e57-ce4b-43b0-9d1f-9542faa4438c-00-13hw12onhg5rz.picard.replit.dev";
 const configuredDomain = process.env.EXPO_PUBLIC_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/$/, "");
 const BASE = `https://${configuredDomain || DEFAULT_DOMAIN}`;
 
