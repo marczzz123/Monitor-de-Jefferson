@@ -537,38 +537,18 @@ public class GuardianAccessibilityService extends AccessibilityService {
 
     String mode = prefs.getString(MODE_KEY, "free");
 
-    // 1. PROTECCION DE ACCESIBILIDAD: bloquear pantallas que desactivan este servicio
-    // SIEMPRE activo independientemente del modo — proteger el servicio es incondicional
+    // 1. PROTECCION DE ACCESIBILIDAD: bloquear cualquier intento de desactivar el servicio
+    // Se activa en CUALQUIER tipo de evento (incluyendo clics desde búsqueda) — siempre activo
     if (isSettingsApp(packageName)) {
       String className = event.getClassName() != null ? event.getClassName().toString() : "";
       boolean isAccessibilityScreen = false;
+
+      // Detectar por clase de pantalla conocida
       for (String ac : ACCESSIBILITY_SETTINGS_CLASSES) {
         if (className.equals(ac) || className.contains(ac)) { isAccessibilityScreen = true; break; }
       }
-      // Chequear keywords en textos del evento
-      if (!isAccessibilityScreen && event.getText() != null) {
-        for (CharSequence txt : event.getText()) {
-          if (txt != null) {
-            String t = txt.toString().toLowerCase();
-            if (t.contains("accesibilidad") || t.contains("accessibility") || t.contains("guardian")
-                || t.contains("servicios de accesibilidad") || t.contains("accessibility services")
-                || t.contains("desactivar") && (t.contains("accesib") || t.contains("guardian"))
-                || t.contains("disable") && (t.contains("accesib") || t.contains("guardian"))) {
-              isAccessibilityScreen = true;
-              break;
-            }
-          }
-        }
-      }
-      // Descripción del contenido
-      CharSequence cDesc = event.getContentDescription();
-      if (!isAccessibilityScreen && cDesc != null) {
-        String cd = cDesc.toString().toLowerCase();
-        if (cd.contains("accesibilidad") || cd.contains("accessibility") || cd.contains("guardian")) {
-          isAccessibilityScreen = true;
-        }
-      }
-      // Clase contiene keywords de accesibilidad
+
+      // Detectar por clase genérica que contiene "accessibility"
       if (!isAccessibilityScreen) {
         String cl = className.toLowerCase();
         if (cl.contains("accessibility") || cl.contains("accesibilidad")
@@ -576,9 +556,49 @@ public class GuardianAccessibilityService extends AccessibilityService {
           isAccessibilityScreen = true;
         }
       }
+
+      // Detectar por textos del evento (cubre resultados de búsqueda y toggles)
+      if (!isAccessibilityScreen && event.getText() != null) {
+        for (CharSequence txt : event.getText()) {
+          if (txt != null) {
+            String t = txt.toString().toLowerCase();
+            if (t.contains("accesibilidad") || t.contains("accessibility")
+                || t.contains("guardian") || t.contains("servicios de accesibilidad")
+                || t.contains("accessibility services")
+                || (t.contains("desactivar") && (t.contains("accesib") || t.contains("guardian")))
+                || (t.contains("disable") && (t.contains("accesib") || t.contains("guardian")))
+                || (t.contains("activar") && t.contains("guardian"))
+                || (t.contains("enable") && t.contains("guardian"))) {
+              isAccessibilityScreen = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // Detectar por descripción de contenido
+      CharSequence cDesc = event.getContentDescription();
+      if (!isAccessibilityScreen && cDesc != null) {
+        String cd = cDesc.toString().toLowerCase();
+        if (cd.contains("accesibilidad") || cd.contains("accessibility") || cd.contains("guardian")) {
+          isAccessibilityScreen = true;
+        }
+      }
+
+      // Detectar por árbol de nodos en pantalla (cubre resultados de búsqueda en ajustes)
+      if (!isAccessibilityScreen) {
+        try {
+          AccessibilityNodeInfo root = getRootInActiveWindow();
+          if (root != null) {
+            isAccessibilityScreen = containsAccessibilityNode(root, 0);
+            root.recycle();
+          }
+        } catch (Exception ignored) {}
+      }
+
       if (isAccessibilityScreen) {
         long nowA = SystemClock.elapsedRealtime();
-        if (!"settings_block".equals(lastBlockedPackage) || nowA - lastBlockAt > 1500) {
+        if (!"settings_block".equals(lastBlockedPackage) || nowA - lastBlockAt > 800) {
           lastBlockedPackage = "settings_block";
           lastBlockAt = nowA;
           performGlobalAction(GLOBAL_ACTION_HOME);
@@ -659,6 +679,26 @@ public class GuardianAccessibilityService extends AccessibilityService {
     lastBlockedPackage = packageName;
     lastBlockAt = now;
     performGlobalAction(GLOBAL_ACTION_HOME);
+  }
+
+
+  private boolean containsAccessibilityNode(AccessibilityNodeInfo node, int depth) {
+    if (node == null || depth > 5) return false;
+    CharSequence text = node.getText();
+    CharSequence desc = node.getContentDescription();
+    String combined = ((text != null ? text.toString() : "") + " " + (desc != null ? desc.toString() : "")).toLowerCase();
+    if (combined.contains("guardian") || combined.contains("accesibilidad") || combined.contains("accessibility")) {
+      return true;
+    }
+    for (int i = 0; i < Math.min(node.getChildCount(), 10); i++) {
+      AccessibilityNodeInfo child = node.getChild(i);
+      if (child != null) {
+        boolean found = containsAccessibilityNode(child, depth + 1);
+        child.recycle();
+        if (found) return true;
+      }
+    }
+    return false;
   }
 
   private boolean isRestrictiveMode(String mode) {
@@ -786,7 +826,7 @@ public class GuardianBootReceiver extends BroadcastReceiver {
 
 const accessibilityConfig = `<?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged|typeWindowContentChanged|typeViewTextChanged"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged|typeWindowContentChanged|typeViewTextChanged|typeViewClicked|typeViewFocused"
   android:accessibilityFeedbackType="feedbackGeneric"
   android:accessibilityFlags="flagReportViewIds"
   android:canRetrieveWindowContent="true"
