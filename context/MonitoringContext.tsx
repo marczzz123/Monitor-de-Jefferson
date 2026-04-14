@@ -134,6 +134,9 @@ const SYSTEM_APP_NAMES = [
   "grabadora", "recorder",
   "brújula", "compass",
   "play store", "app store",
+  "launcher", "iniciador", "inicio", "home screen", "escritorio",
+  "teclado", "keyboard",
+  "asistente", "assistant",
 ];
 
 export function classifyPackage(packageName: string, appName: string): MonitoredApp["category"] {

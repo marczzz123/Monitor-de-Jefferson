@@ -506,39 +506,56 @@ public class GuardianAccessibilityService extends AccessibilityService {
 
     String mode = prefs.getString(MODE_KEY, "free");
 
-    // 1. PROTECCION DE ACCESIBILIDAD: bloquear pantallas de Ajustes que desactivan este servicio
-    if (isSettingsApp(packageName) && isRestrictiveMode(mode)) {
+    // 1. PROTECCION DE ACCESIBILIDAD: bloquear pantallas que desactivan este servicio
+    // SIEMPRE activo independientemente del modo — proteger el servicio es incondicional
+    if (isSettingsApp(packageName)) {
       String className = event.getClassName() != null ? event.getClassName().toString() : "";
       boolean isAccessibilityScreen = false;
       for (String ac : ACCESSIBILITY_SETTINGS_CLASSES) {
-        if (className.equals(ac)) { isAccessibilityScreen = true; break; }
+        if (className.equals(ac) || className.contains(ac)) { isAccessibilityScreen = true; break; }
       }
-      // Si no coincide exactamente, chequeamos por keywords en el título de la ventana
+      // Chequear keywords en textos del evento
       if (!isAccessibilityScreen && event.getText() != null) {
         for (CharSequence txt : event.getText()) {
           if (txt != null) {
             String t = txt.toString().toLowerCase();
-            if (t.contains("accesibilidad") || t.contains("accessibility") || t.contains("guardian")) {
+            if (t.contains("accesibilidad") || t.contains("accessibility") || t.contains("guardian")
+                || t.contains("servicios de accesibilidad") || t.contains("accessibility services")
+                || t.contains("desactivar") && (t.contains("accesib") || t.contains("guardian"))
+                || t.contains("disable") && (t.contains("accesib") || t.contains("guardian"))) {
               isAccessibilityScreen = true;
               break;
             }
           }
         }
       }
-      // También bloqueamos si la clase es SubSettings (pantalla genérica dentro de Ajustes)
-      if (!isAccessibilityScreen && className.contains("SubSettings")) {
-        isAccessibilityScreen = true;
+      // Descripción del contenido
+      CharSequence cDesc = event.getContentDescription();
+      if (!isAccessibilityScreen && cDesc != null) {
+        String cd = cDesc.toString().toLowerCase();
+        if (cd.contains("accesibilidad") || cd.contains("accessibility") || cd.contains("guardian")) {
+          isAccessibilityScreen = true;
+        }
+      }
+      // Clase contiene keywords de accesibilidad
+      if (!isAccessibilityScreen) {
+        String cl = className.toLowerCase();
+        if (cl.contains("accessibility") || cl.contains("accesibilidad")
+            || cl.contains("subsettings") || cl.contains("sub_settings")) {
+          isAccessibilityScreen = true;
+        }
       }
       if (isAccessibilityScreen) {
         long nowA = SystemClock.elapsedRealtime();
-        if (!"settings_block".equals(lastBlockedPackage) || nowA - lastBlockAt > 2000) {
+        if (!"settings_block".equals(lastBlockedPackage) || nowA - lastBlockAt > 1500) {
           lastBlockedPackage = "settings_block";
           lastBlockAt = nowA;
           performGlobalAction(GLOBAL_ACTION_HOME);
         }
         return;
       }
-      return; // Otras pantallas de Ajustes se permiten
+      // Otras pantallas de Ajustes: solo bloquear en modo restrictivo
+      if (!isRestrictiveMode(mode)) return;
     }
 
     // 2. Solo procesar eventos de cambio de ventana para lo demás

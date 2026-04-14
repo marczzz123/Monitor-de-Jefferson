@@ -91,6 +91,7 @@ export default function DashboardScreen() {
 
   const [analyzing, setAnalyzing] = useState(false);
   const [lastDecision, setLastDecision] = useState<{ decision: string; reason: string } | null>(null);
+  const lastAnalyzedPackageRef = useRef<string | null>(null);
 
   const totalMinutes = todayUsage.reduce((s, u) => s + u.minutes, 0);
   const blockedToday = recentActions.filter((a) => a.action === "close").length;
@@ -154,7 +155,12 @@ export default function DashboardScreen() {
   }, [currentApp, analyzing, todayUsage, schedule, restrictedApps, currentMode, tasksCompleted, addAction, addBlockAttempt]);
 
   useEffect(() => {
-    if (currentApp && isMonitoring) { analyzeCurrentApp(); }
+    if (currentApp && isMonitoring) {
+      if (lastAnalyzedPackageRef.current !== currentApp.packageName) {
+        lastAnalyzedPackageRef.current = currentApp.packageName;
+        analyzeCurrentApp();
+      }
+    }
   }, [currentApp]);
 
   const decisionColor =
