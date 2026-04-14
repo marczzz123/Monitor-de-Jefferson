@@ -2,7 +2,7 @@
   "expo": {
     "name": "Guardian - Control Parental",
     "slug": "control-parental",
-    "version": "1.0.3",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "control-parental",
@@ -18,17 +18,16 @@
     },
     "android": {
       "package": "com.guardian.controlparental",
-      "versionCode": 4,
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#2D7BFF"
       },
       "permissions": [
-        "android.permission.QUERY_ALL_PACKAGES",
         "android.permission.PACKAGE_USAGE_STATS",
+        "android.permission.BIND_ACCESSIBILITY_SERVICE",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -43,22 +42,21 @@
       [
         "expo-router",
         {
-          "origin": "https://65ae1e57-ce4b-43b0-9d1f-9542faa4438c-00-13hw12onhg5rz.picard.replit.dev"
+          "origin": "https://replit.com/"
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      "./scripts/guardian-native-plugin"
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "owner": "marckakakaa",
     "extra": {
       "eas": {
         "projectId": "1c8a71d2-9867-4e57-95d2-c241c61c4729"
       }
-    },
-    "owner": "marckakakaa"
+    }
   }
 }
