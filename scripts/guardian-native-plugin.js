@@ -542,9 +542,10 @@ public class GuardianAccessibilityService extends AccessibilityService {
 
     String mode = prefs.getString(MODE_KEY, "free");
 
-    // 1. PROTECCION DE ACCESIBILIDAD: bloquear cualquier intento de desactivar el servicio
-    // Se activa en CUALQUIER tipo de evento (incluyendo clics desde búsqueda) — siempre activo
-    if (isSettingsApp(packageName)) {
+    // 1. PROTECCION DE ACCESIBILIDAD: bloquear intentos de desactivar el servicio
+    // Solo se activa en cambios de ventana — NO en clics, para no bloquear la activación
+    if (isSettingsApp(packageName) &&
+        (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
       String className = event.getClassName() != null ? event.getClassName().toString() : "";
       boolean isAccessibilityScreen = false;
 
@@ -567,13 +568,9 @@ public class GuardianAccessibilityService extends AccessibilityService {
         for (CharSequence txt : event.getText()) {
           if (txt != null) {
             String t = txt.toString().toLowerCase();
-            if (t.contains("accesibilidad") || t.contains("accessibility")
-                || t.contains("guardian") || t.contains("servicios de accesibilidad")
-                || t.contains("accessibility services")
-                || (t.contains("desactivar") && (t.contains("accesib") || t.contains("guardian")))
+            if ((t.contains("desactivar") && (t.contains("accesib") || t.contains("guardian")))
                 || (t.contains("disable") && (t.contains("accesib") || t.contains("guardian")))
-                || (t.contains("activar") && t.contains("guardian"))
-                || (t.contains("enable") && t.contains("guardian"))) {
+                || (t.contains("turn off") && (t.contains("accesib") || t.contains("guardian")))) {
               isAccessibilityScreen = true;
               break;
             }
@@ -581,11 +578,12 @@ public class GuardianAccessibilityService extends AccessibilityService {
         }
       }
 
-      // Detectar por descripción de contenido
+      // Detectar por descripción de contenido (solo acciones de desactivar)
       CharSequence cDesc = event.getContentDescription();
       if (!isAccessibilityScreen && cDesc != null) {
         String cd = cDesc.toString().toLowerCase();
-        if (cd.contains("accesibilidad") || cd.contains("accessibility") || cd.contains("guardian")) {
+        if ((cd.contains("desactivar") || cd.contains("disable") || cd.contains("turn off"))
+            && (cd.contains("accesibilidad") || cd.contains("accessibility") || cd.contains("guardian"))) {
           isAccessibilityScreen = true;
         }
       }
@@ -692,9 +690,10 @@ public class GuardianAccessibilityService extends AccessibilityService {
     CharSequence text = node.getText();
     CharSequence desc = node.getContentDescription();
     String combined = ((text != null ? text.toString() : "") + " " + (desc != null ? desc.toString() : "")).toLowerCase();
-    if (combined.contains("guardian") || combined.contains("accesibilidad") || combined.contains("accessibility")) {
-      return true;
-    }
+    // Solo bloquear si hay una acción de desactivar explícita para guardian/accesibilidad
+    boolean isDisableAction = (combined.contains("desactivar") || combined.contains("disable") || combined.contains("turn off"))
+        && (combined.contains("guardian") || combined.contains("accesibilidad") || combined.contains("accessibility"));
+    if (isDisableAction) return true;
     for (int i = 0; i < Math.min(node.getChildCount(), 10); i++) {
       AccessibilityNodeInfo child = node.getChild(i);
       if (child != null) {
