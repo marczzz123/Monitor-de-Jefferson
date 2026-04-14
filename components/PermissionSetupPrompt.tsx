@@ -3,6 +3,7 @@ import { Feather } from "@expo/vector-icons";
 import * as IntentLauncher from "expo-intent-launcher";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Linking,
   Modal,
   PermissionsAndroid,
@@ -32,6 +33,46 @@ function getAndroidVersion() {
   return typeof Platform.Version === "number"
     ? Platform.Version
     : parseInt(String(Platform.Version), 10);
+}
+
+async function openAccessibilitySettings() {
+  const androidVersion = getAndroidVersion();
+
+  const goToAccessibility = async () => {
+    try {
+      await IntentLauncher.startActivityAsync(
+        "android.settings.ACCESSIBILITY_DETAILS_SETTINGS",
+        { data: `package:${ANDROID_PACKAGE}` }
+      );
+    } catch {
+      try {
+        await IntentLauncher.startActivityAsync("android.settings.ACCESSIBILITY_SETTINGS");
+      } catch {
+        await Linking.openSettings();
+      }
+    }
+  };
+
+  if (androidVersion >= 33) {
+    Alert.alert(
+      "Paso previo necesario",
+      "En Android 13 o superior debes permitir configuraciones restringidas primero:\n\n1. Presiona \"Ir a info de la app\"\n2. Toca el menú ⋮ (tres puntos arriba a la derecha)\n3. Selecciona \"Permitir configuraciones restringidas\"\n4. Vuelve aquí y presiona \"Ir a Accesibilidad\"",
+      [
+        {
+          text: "Ir a info de la app",
+          onPress: () =>
+            openAndroidSettings(
+              "android.settings.APPLICATION_DETAILS_SETTINGS",
+              `package:${ANDROID_PACKAGE}`
+            ),
+        },
+        { text: "Ir a Accesibilidad", onPress: goToAccessibility },
+        { text: "Cancelar", style: "cancel" },
+      ]
+    );
+  } else {
+    await goToAccessibility();
+  }
 }
 
 export function PermissionSetupPrompt() {
@@ -104,10 +145,12 @@ export function PermissionSetupPrompt() {
     },
     {
       title: "Servicio de accesibilidad",
-      description: "Activa Guardian - Control Parental en Accesibilidad para cerrar apps restringidas.",
+      description: getAndroidVersion() >= 33
+        ? "Android 13+: primero ve a info de la app → ⋮ menú → \"Permitir configuraciones restringidas\", luego activa aquí."
+        : "Activa Guardian - Control Parental en Accesibilidad para cerrar apps restringidas.",
       icon: "eye" as const,
-      actionLabel: "Abrir ajuste",
-      onPress: () => openAndroidSettings("android.settings.ACCESSIBILITY_SETTINGS"),
+      actionLabel: "Activar",
+      onPress: openAccessibilitySettings,
       disabled: false,
       highlight: false,
     },
@@ -125,7 +168,7 @@ export function PermissionSetupPrompt() {
       description: "Evita que Android cierre Guardian cuando esta monitoreando.",
       icon: "battery-charging" as const,
       actionLabel: "Abrir ajuste",
-      onPress: () => Linking.openSettings(),
+      onPress: () => openAndroidSettings("android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", `package:${ANDROID_PACKAGE}`),
       disabled: false,
       highlight: false,
     },
