@@ -293,6 +293,37 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
     }
   }
 
+
+  @ReactMethod
+  public void isDeviceAdminActive(Promise promise) {
+    try {
+      android.app.admin.DevicePolicyManager dpm =
+        (android.app.admin.DevicePolicyManager) reactContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+      android.content.ComponentName adminComponent =
+        new android.content.ComponentName(reactContext, GuardianDeviceAdminReceiver.class);
+      promise.resolve(dpm != null && dpm.isAdminActive(adminComponent));
+    } catch (Exception e) {
+      promise.resolve(false);
+    }
+  }
+
+  @ReactMethod
+  public void activateDeviceAdmin(Promise promise) {
+    try {
+      android.content.ComponentName adminComponent =
+        new android.content.ComponentName(reactContext, GuardianDeviceAdminReceiver.class);
+      Intent intent = new Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+      intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent);
+      intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+        "Guardian necesita ser Administrador de dispositivo para proteger el control parental y evitar que se desinstale sin permiso.");
+      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      reactContext.startActivity(intent);
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("DEVICE_ADMIN_ERROR", e);
+    }
+  }
+
   private SharedPreferences getPrefs() {
     return reactContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
   }
@@ -692,6 +723,46 @@ public class GuardianAccessibilityService extends AccessibilityService {
 }
 `;
 
+
+const deviceAdminReceiver = `package com.guardian.controlparental;
+
+import android.app.admin.DeviceAdminReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.widget.Toast;
+
+public class GuardianDeviceAdminReceiver extends DeviceAdminReceiver {
+
+  @Override
+  public void onEnabled(Context context, Intent intent) {
+    Toast.makeText(context, "Guardian: Administrador de dispositivo activado", Toast.LENGTH_SHORT).show();
+  }
+
+  @Override
+  public CharSequence onDisableRequested(Context context, Intent intent) {
+    return "Necesitas la contraseña de Guardian para desactivar el administrador de dispositivo.";
+  }
+
+  @Override
+  public void onDisabled(Context context, Intent intent) {
+    Toast.makeText(context, "Guardian: Administrador de dispositivo desactivado", Toast.LENGTH_SHORT).show();
+  }
+}
+`;
+
+const deviceAdminConfig = `<?xml version="1.0" encoding="utf-8"?>
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-policies>
+    <limit-password />
+    <watch-login />
+    <reset-password />
+    <force-lock />
+    <wipe-data />
+  </uses-policies>
+</device-admin>
+`;
+
+
 const receiver = `package com.guardian.controlparental;
 
 import android.content.BroadcastReceiver;
@@ -763,6 +834,28 @@ module.exports = function withGuardianNative(config) {
           },
         ],
       });
+
+      addApplicationItem(application, "receiver", ".GuardianDeviceAdminReceiver", {
+        $: {
+          "android:name": ".GuardianDeviceAdminReceiver",
+          "android:permission": "android.permission.BIND_DEVICE_ADMIN",
+          "android:exported": "true",
+        },
+        "intent-filter": [
+          {
+            action: [{ $: { "android:name": "android.app.action.DEVICE_ADMIN_ENABLED" } }],
+          },
+        ],
+        "meta-data": [
+          {
+            $: {
+              "android:name": "android.app.device_admin",
+              "android:resource": "@xml/guardian_device_admin",
+            },
+          },
+        ],
+      });
+
       addApplicationItem(application, "receiver", ".GuardianBootReceiver", {
         $: {
           "android:name": ".GuardianBootReceiver",
@@ -788,6 +881,8 @@ module.exports = function withGuardianNative(config) {
     writeFile(path.join(javaRoot, "GuardianMonitoringService.java"), service);
     writeFile(path.join(javaRoot, "GuardianAccessibilityService.java"), accessibilityService);
     writeFile(path.join(javaRoot, "GuardianBootReceiver.java"), receiver);
+    writeFile(path.join(javaRoot, "GuardianDeviceAdminReceiver.java"), deviceAdminReceiver);
+    writeFile(path.join(resRoot, "xml/guardian_device_admin.xml"), deviceAdminConfig);
     writeFile(path.join(resRoot, "xml/guardian_accessibility_service.xml"), accessibilityConfig);
 
     const stringsPath = path.join(resRoot, "values/strings.xml");
