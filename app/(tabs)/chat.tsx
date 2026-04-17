@@ -22,9 +22,11 @@ import {
   getTomorrowSubjects,
   getDayName,
   getTomorrowDayName,
-  detectSubject,
   generateNightChallengeQuestion,
   checkNightChallengeAnswer,
+  getSubjectMenu,
+  detectMenuSelection,
+  getTutorIntro,
   type ChatMessage,
   type NightChallenge,
   ALL_SIMULACRO_SUBJECTS,
@@ -38,20 +40,15 @@ interface Message {
   isHint?: boolean;
 }
 
-function getInitialMessage(mode: string): string {
-  const subjects = getTodaySubjects();
-  const tomorrowSubjects = getTomorrowSubjects();
+function getInitialMessage(mode: string, pendingSubjects: string[]): string {
   const dayName = getDayName();
   const tomorrowName = getTomorrowDayName();
 
   if (mode === "study") {
-    const tomorrowHint = tomorrowSubjects.length > 0
-      ? ` Para desbloquear las redes sociales, necesitas estudiar: ${tomorrowSubjects.join(", ")} (materias de mañana, ${tomorrowName}).`
-      : "";
-    if (subjects.length > 0) {
-      return `Hola Jefferson! Hoy es ${dayName} y tienes: ${subjects.join(", ")}. ¿En cuál necesitas ayuda? No te daré las respuestas directas, pero sí buenas pistas. A las 7 PM tienes tiempo libre para juegos y redes.${tomorrowHint}`;
+    if (pendingSubjects.length > 0) {
+      return `Hola Jefferson! Es hora de estudiar. Hoy es ${dayName} y mañana (${tomorrowName}) tienes materias que repasar.\n\nNo te daré las respuestas directas — solo pistas para que tú mismo llegues a ellas. A las 7 PM tendrás tiempo libre, pero primero hay que terminar esto.\n\n${getSubjectMenu(pendingSubjects)}`;
     }
-    return `Hola Jefferson! Estoy aquí para ayudarte con tus tareas. ¿En qué materia necesitas ayuda? A las 7 PM es tu tiempo libre.${tomorrowHint}`;
+    return `Hola Jefferson! ¡Ya terminaste todas las materias de mañana! A las 7 PM tienes tiempo libre.`;
   }
   if (mode === "school") {
     return "Estás en horario escolar. Puedo ayudarte con dudas de clase si necesitas. ¿Qué necesitas?";
@@ -60,6 +57,7 @@ function getInitialMessage(mode: string): string {
     return "Es hora de descansar, Jefferson. Si quieres 10 minutos más, resuelve el reto que te muestro. ¡Buenas noches!";
   }
   if (mode === "free" || mode === "lunch") {
+    const subjects = getTodaySubjects();
     if (subjects.length > 0) {
       return `Hola Jefferson! Hoy es ${dayName}. Tienes estas materias: ${subjects.join(", ")}. Si tienes alguna tarea o duda, cuéntame. También puedes preguntarme sobre el simulacro.`;
     }
@@ -99,10 +97,28 @@ function ModeTag({ mode, colors }: { mode: string; colors: ReturnType<typeof use
 export default function ChatScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { getUsageContext, currentMode, tasksCompleted, setTasksCompleted, markSubjectDone, grantNightExtraTime, sleepOverrideUntil } = useMonitoring();
+  const {
+    getUsageContext,
+    currentMode,
+    tasksCompleted,
+    subjectsDone,
+    markSubjectDone,
+    grantNightExtraTime,
+    sleepOverrideUntil,
+  } = useMonitoring();
+
+  const tomorrowSubjects = getTomorrowSubjects();
+  const pendingSubjects = tomorrowSubjects.filter(s => !subjectsDone[s]);
+
+  // Tutor state machine
+  const [tutorPhase, setTutorPhase] = useState<"menu" | "studying">("menu");
+  const [currentSubject, setCurrentSubject] = useState<string | null>(null);
+  const [subjectTurnCount, setSubjectTurnCount] = useState(0);
+  // canMarkDone becomes true after 3 real turns on the subject
+  const [canMarkDone, setCanMarkDone] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
-    { id: "0", role: "assistant", content: getInitialMessage(currentMode) },
+    { id: "0", role: "assistant", content: getInitialMessage(currentMode, pendingSubjects) },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,7 +136,6 @@ export default function ChatScreen() {
 
   const isStudyMode = currentMode === "study";
   const isSleepMode = currentMode === "sleep";
-  const tomorrowSubjects = getTomorrowSubjects();
   const todaySubjects = getTodaySubjects();
 
   function openNightChallenge() {
@@ -149,6 +164,31 @@ export default function ChatScreen() {
     }
   }
 
+  // Called when the "Completar materia" button is pressed
+  function handleMarkSubjectDone() {
+    if (!currentSubject) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    markSubjectDone(currentSubject);
+
+    const doneSubject = currentSubject;
+    setCurrentSubject(null);
+    setSubjectTurnCount(0);
+    setCanMarkDone(false);
+    setTutorPhase("menu");
+
+    const remaining = tomorrowSubjects.filter(s => !subjectsDone[s] && s !== doneSubject);
+
+    const successMsg: Message = {
+      id: Date.now().toString(),
+      role: "assistant",
+      content: remaining.length > 0
+        ? `¡Excelente! Terminaste ${doneSubject}. ✓\n\n${getSubjectMenu(remaining)}`
+        : `¡Felicitaciones! Terminaste todas las materias de mañana. A las 7 PM tendrás tiempo libre para juegos y redes sociales. ¡Buen trabajo!`,
+    };
+    setMessages(prev => [...prev, successMsg]);
+    setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
@@ -156,23 +196,75 @@ export default function ChatScreen() {
     Haptics.selectionAsync();
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: text };
-    const asstId = (Date.now() + 1).toString();
-    const asstMsg: Message = { id: asstId, role: "assistant", content: "", streaming: true, isHint: isStudyMode };
-
-    setMessages((prev) => [...prev, userMsg, asstMsg]);
+    setMessages(prev => [...prev, userMsg]);
     setLoading(true);
-
     setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
 
-    // Auto-detect subject and mark as done
-    const allRelevant = [...new Set([...tomorrowSubjects, ...todaySubjects, ...ALL_SIMULACRO_SUBJECTS])];
-    const detected = detectSubject(text, allRelevant);
-    if (detected && tomorrowSubjects.includes(detected)) {
-      markSubjectDone(detected);
+    // --- ESTUDIO: Manejo del flujo por fases ---
+    if (isStudyMode) {
+      const currentPending = tomorrowSubjects.filter(s => !subjectsDone[s]);
+
+      // FASE MENU: detectar si Jefferson elige una materia
+      if (tutorPhase === "menu" && currentPending.length > 0) {
+        const selected = detectMenuSelection(text, currentPending);
+        if (selected) {
+          // Jefferson eligió una materia — iniciar sesión de estudio
+          setTutorPhase("studying");
+          setCurrentSubject(selected);
+          setSubjectTurnCount(0);
+          setCanMarkDone(false);
+
+          const introMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: getTutorIntro(selected),
+            isHint: true,
+          };
+          setMessages(prev => [...prev, introMsg]);
+          setLoading(false);
+          setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+          return;
+        }
+        // No eligió número válido — recordarle el menú
+        const remindMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `Escribe el número de la materia que quieres estudiar:\n\n${getSubjectMenu(currentPending)}`,
+        };
+        setMessages(prev => [...prev, remindMsg]);
+        setLoading(false);
+        setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+        return;
+      }
+
+      // FASE ESTUDIANDO: incrementar contador de turnos
+      if (tutorPhase === "studying" && currentSubject) {
+        const newCount = subjectTurnCount + 1;
+        setSubjectTurnCount(newCount);
+        // Habilitar el botón "Completar materia" solo después de 3 intercambios reales
+        if (newCount >= 3) {
+          setCanMarkDone(true);
+        }
+      }
     }
 
-    const history: ChatMessage[] = messages.map((m) => ({ role: m.role, content: m.content }));
-    const ctx = getUsageContext();
+    // Construir historial y contexto enriquecido con materia actual
+    const asstId = (Date.now() + 1).toString();
+    const asstMsg: Message = {
+      id: asstId,
+      role: "assistant",
+      content: "",
+      streaming: true,
+      isHint: isStudyMode,
+    };
+    setMessages(prev => [...prev, asstMsg]);
+
+    const history: ChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }));
+    const ctx = {
+      ...getUsageContext(),
+      current_subject: currentSubject,
+      subject_turn_count: subjectTurnCount,
+    };
 
     try {
       await streamChat(
@@ -180,22 +272,22 @@ export default function ChatScreen() {
         history,
         ctx,
         (chunk) => {
-          setMessages((prev) =>
-            prev.map((m) => m.id === asstId ? { ...m, content: m.content + chunk } : m)
+          setMessages(prev =>
+            prev.map(m => m.id === asstId ? { ...m, content: m.content + chunk } : m)
           );
           setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 50);
         },
         () => {
-          setMessages((prev) =>
-            prev.map((m) => m.id === asstId ? { ...m, streaming: false } : m)
+          setMessages(prev =>
+            prev.map(m => m.id === asstId ? { ...m, streaming: false } : m)
           );
           setLoading(false);
         }
       );
     } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === asstId ? { ...m, content: "Error al conectar. Revisa tu conexion.", streaming: false } : m
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === asstId ? { ...m, content: "Error al conectar. Revisa tu conexión.", streaming: false } : m
         )
       );
       setLoading(false);
@@ -218,7 +310,11 @@ export default function ChatScreen() {
               <Text style={[styles.hintLabelText, { color: colors.primary }]}>Pista del tutor</Text>
             </View>
           )}
-          <View style={[styles.bubble, { backgroundColor: isUser ? colors.primary : colors.card, borderColor: isUser ? colors.primary : colors.border, maxWidth: 260 }]}>
+          <View style={[styles.bubble, {
+            backgroundColor: isUser ? colors.primary : colors.card,
+            borderColor: isUser ? colors.primary : colors.border,
+            maxWidth: 260,
+          }]}>
             <Text style={[styles.bubbleText, { color: isUser ? "#fff" : colors.foreground }]}>
               {item.content || (item.streaming ? "..." : "")}
             </Text>
@@ -272,22 +368,32 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* BANNER MODO ESTUDIO */}
+      {/* BANNER MODO ESTUDIO — muestra materia actual y progreso */}
       {isStudyMode && (
         <View style={[styles.studyBanner, { backgroundColor: colors.primary + "10", borderBottomColor: colors.primary + "30" }]}>
-          <Feather name="info" size={13} color={colors.primary} />
-          <Text style={[styles.studyBannerText, { color: colors.primary }]}>
-            {tasksCompleted
-              ? "¡Tareas listas! El entretenimiento está desbloqueado."
-              : "Estudia cada materia de mañana aquí para desbloquear juegos y redes."}
-          </Text>
-          {!tasksCompleted && (
-            <TouchableOpacity
-              onPress={() => setTasksCompleted(true)}
-              style={[styles.doneBtn, { backgroundColor: colors.success }]}
-            >
-              <Text style={styles.doneBtnText}>Listo</Text>
-            </TouchableOpacity>
+          <Feather name="book-open" size={13} color={colors.primary} />
+          {tasksCompleted ? (
+            <Text style={[styles.studyBannerText, { color: colors.primary }]}>
+              ¡Tareas listas! El entretenimiento estará disponible a las 7 PM.
+            </Text>
+          ) : currentSubject ? (
+            <>
+              <Text style={[styles.studyBannerText, { color: colors.primary }]}>
+                Estudiando: {currentSubject} ({subjectTurnCount}/3 min.)
+              </Text>
+              {canMarkDone && (
+                <TouchableOpacity
+                  onPress={handleMarkSubjectDone}
+                  style={[styles.doneBtn, { backgroundColor: colors.success }]}
+                >
+                  <Text style={styles.doneBtnText}>✓ Completar</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <Text style={[styles.studyBannerText, { color: colors.primary }]}>
+              Elige una materia para empezar. Pendientes: {tomorrowSubjects.filter(s => !subjectsDone[s]).length}/{tomorrowSubjects.length}
+            </Text>
           )}
         </View>
       )}
@@ -305,7 +411,12 @@ export default function ChatScreen() {
       <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: botPad }]}>
         <TextInput
           style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border }]}
-          placeholder={isStudyMode ? "Escribe tu pregunta de tarea..." : isSleepMode ? "Escríbeme si necesitas algo..." : "Escribe tu pregunta..."}
+          placeholder={
+            isStudyMode
+              ? tutorPhase === "menu" ? "Escribe el número de la materia..." : `Pregunta sobre ${currentSubject}...`
+              : isSleepMode ? "Escríbeme si necesitas algo..."
+              : "Escribe tu pregunta..."
+          }
           placeholderTextColor={colors.mutedForeground}
           value={input}
           onChangeText={setInput}
@@ -440,7 +551,6 @@ const styles = StyleSheet.create({
   inputBar: { flexDirection: "row", alignItems: "flex-end", padding: 12, paddingTop: 12, gap: 10, borderTopWidth: 1 },
   input: { flex: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, fontFamily: "Inter_400Regular", borderWidth: 1, maxHeight: 100 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
-  // Night challenge modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 20 },
   modalCard: { borderRadius: 20, padding: 24, width: "100%", maxWidth: 380, gap: 16 },
   modalHeader: { alignItems: "center", gap: 8 },
