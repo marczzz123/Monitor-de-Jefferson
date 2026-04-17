@@ -311,6 +311,48 @@ export function checkNightChallengeAnswer(correctAnswer: string, userAnswer: str
 }
 
 // =============================================
+// Flujo de tutor estructurado — menú por materias
+// =============================================
+
+export function getSubjectMenu(subjects: string[]): string {
+  if (subjects.length === 0) return "¡Listo! No tienes materias pendientes.";
+  const list = subjects.map((s, i) => `${i + 1}. ${s}`).join("\n");
+  return `Estas son tus materias pendientes para mañana:\n\n${list}\n\nEscribe el número de la materia con la que quieres empezar.`;
+}
+
+export function detectMenuSelection(message: string, subjects: string[]): string | null {
+  const trimmed = message.trim();
+  const num = parseInt(trimmed, 10);
+  if (!isNaN(num) && num >= 1 && num <= subjects.length) {
+    return subjects[num - 1];
+  }
+  return detectSubject(message, subjects);
+}
+
+export function getTutorIntro(subject: string): string {
+  const intros: Record<string, string> = {
+    "Álgebra": "Vamos con **Álgebra**. Escríbeme el enunciado completo de tu ejercicio. Dime también qué intentaste hacer primero.",
+    "Aritmética": "Vamos con **Aritmética**. ¿Qué problema tienes? Escríbeme el enunciado y dime qué parte te está confundiendo.",
+    "Química": "Vamos con **Química**. Cuéntame qué ejercicio tienes. ¿Es sobre elementos, reacciones, fórmulas o la tabla periódica?",
+    "Geometría": "Vamos con **Geometría**. Descríbeme la figura o el problema que tienes. ¿Qué datos te dan?",
+    "Trigonometría": "Vamos con **Trigonometría**. Escríbeme el ejercicio. ¿Qué ángulos o funciones están involucrados?",
+    "Razonamiento Matemático": "Vamos con **Razonamiento Matemático**. ¿Qué tipo de problema tienes? ¿Serie, patrón o problema de lógica?",
+    "Geografía": "Vamos con **Geografía**. ¿Qué tema te tocó? ¿Es sobre el Perú, el mundo, climas o accidentes geográficos?",
+    "Historia del Perú": "Vamos con **Historia del Perú**. ¿Qué época o tema tienes que estudiar? Cuéntame.",
+    "Historia Universal": "Vamos con **Historia Universal**. ¿De qué época o evento es tu tarea?",
+    "Inglés": "Let's work on **Inglés**. ¿Es gramática, vocabulario o comprensión de lectura? Escríbeme el ejercicio exacto.",
+    "Biología": "Vamos con **Biología**. ¿El tema es sobre células, el cuerpo humano, ecosistemas o reproducción?",
+    "Lenguaje": "Vamos con **Lenguaje**. ¿Es análisis de oraciones, gramática u ortografía? Escríbeme el ejercicio.",
+    "Literatura": "Vamos con **Literatura**. ¿Qué obra o autor tienes que analizar? Cuéntame el tema.",
+    "Razonamiento Verbal": "Vamos con **Razonamiento Verbal**. ¿Tienes analogías, sinónimos, antónimos o comprensión de texto?",
+    "Ed. Cívica": "Vamos con **Ed. Cívica**. ¿El tema es sobre derechos, el Estado peruano o la Constitución?",
+    "Religión": "Vamos con **Religión**. ¿Qué tema te asignaron? Cuéntame y lo trabajamos.",
+    "Cómputo": "Vamos con **Cómputo**. ¿Es sobre hardware, software, internet o algo práctico de computación?",
+  };
+  return intros[subject] ?? `Vamos con **${subject}**. Cuéntame qué ejercicio o tema tienes de tarea. No te daré la respuesta directa, pero sí pistas para que tú mismo llegues a ella.`;
+}
+
+// =============================================
 // Chat y análisis
 // =============================================
 
@@ -506,96 +548,75 @@ function getSimulacroResponse(message: string, history: ChatMessage[]): string {
   return `Para preparar el simulacro, lo mejor es repasar poco a poco cada materia. ¿Cuál te genera más dudas: las matemáticas (Álgebra, Aritmética, Geometría, Trigonometría), las ciencias (Biología, Química) o las humanidades (Historia, Geografía, Literatura)?`;
 }
 
-function localStudyTutor(message: string, history: ChatMessage[]): string {
+export function localStudyTutor(
+  message: string,
+  history: ChatMessage[],
+  currentSubject?: string | null,
+  subjectTurnCount?: number,
+): string {
   const lower = message.toLowerCase();
-  const todaySubjects = getTodaySubjects();
   const tomorrowSubjects = getTomorrowSubjects();
-  const dayName = getDayName();
   const userHistory = history.filter(m => m.role === "user");
-  const turnCount = userHistory.length;
+  const globalTurn = userHistory.length;
+  const turn = subjectTurnCount ?? globalTurn;
 
-  if (isSimulacroQuestion(lower)) {
-    return getSimulacroResponse(message, history);
-  }
-
-  if (isAskingForGame(lower)) {
-    return "Los juegos se desbloquean cuando termines todas las materias de mañana con el tutor. Dime en cuál necesitas ayuda y lo hacemos juntos.";
-  }
-
-  if (isAskingForApp(lower)) {
-    if (!hasDiscussedHomework(history)) {
-      if (tomorrowSubjects.length > 0) {
-        return `Primero necesitas estudiar las materias de mañana (${getTomorrowDayName()}: ${tomorrowSubjects.join(", ")}). Cuando termines todas, el entretenimiento se desbloquea solo. ¿Por cuál empezamos?`;
-      }
-      return "Primero dime qué tareas tienes para mañana. Te ayudo a estudiarlas y cuando termines, el entretenimiento se desbloquea.";
+  // --- Peticiones de juegos/apps: siempre redirigir ---
+  if (isAskingForGame(lower) || isAskingForApp(lower)) {
+    if (tomorrowSubjects.length > 0) {
+      return "Los juegos y las redes sociales se desbloquean cuando termines todas las materias de mañana. Elige un número para continuar con la siguiente materia.";
     }
-    return "Sigue un poco más con tus tareas. Cuando termines todas las materias de mañana, los juegos y las redes se desbloquean solos.";
+    return "Cuando termines todas las materias, el entretenimiento se desbloquea solo a las 7 PM.";
   }
 
-  const detectedSubject = detectSubject(message, [...todaySubjects, ...tomorrowSubjects, ...ALL_SIMULACRO_SUBJECTS]);
-
-  const isAskingDirect =
-    lower.includes("respuesta") ||
-    lower.includes("solución") ||
-    lower.includes("solucion") ||
-    lower.includes("resultado") ||
-    lower.includes("cuánto es") ||
-    lower.includes("cuanto es") ||
-    lower.includes("cómo se hace") ||
-    lower.includes("como se hace") ||
-    lower.includes("dame la") ||
-    lower.includes("dime la") ||
-    lower.includes("cuál es") ||
-    lower.includes("cual es");
-
-  if (isAskingDirect) {
-    if (detectedSubject) {
-      return `No te daré la respuesta directa, ¡pero sí te ayudaré a encontrarla! ${getSubjectHint(detectedSubject, message, turnCount)}`;
+  // --- MODO: estudiando una materia específica ---
+  if (currentSubject) {
+    // Detectar si Jefferson está preguntando sobre una materia DIFERENTE (intento de cambiar tema)
+    const mentionedSubject = detectSubject(message, tomorrowSubjects.filter(s => s !== currentSubject));
+    if (mentionedSubject && mentionedSubject !== currentSubject) {
+      return `Primero terminemos con ${currentSubject}. Después pasamos a ${mentionedSubject}. ¿Qué ejercicio tienes de ${currentSubject}?`;
     }
-    return "Recuerda que no doy respuestas directas, te guío para que las descubras tú mismo. ¿Qué datos tienes en el ejercicio? Empieza por ahí.";
-  }
 
-  const seemsToUnderstand =
-    lower.includes("entend") ||
-    lower.includes("ya sé") || lower.includes("ya se") ||
-    lower.includes("es correcto") ||
-    lower.includes("entonces es") ||
-    lower.includes("creo que es") ||
-    lower.includes("puede ser") ||
-    lower.includes("sería") || lower.includes("seria");
-
-  if (seemsToUnderstand && turnCount >= 2) {
-    const confirmations = [
-      "Muy bien! Explícame con tus propias palabras lo que entendiste y te confirmo si vas por el camino correcto.",
-      "Excelente razonamiento. ¿Puedes explicarme el proceso que seguiste para llegar a esa conclusión?",
-      "Bien! Cuéntame por qué crees que eso es correcto. Así me aseguro de que lo entendiste del todo.",
-    ];
-    return confirmations[turnCount % confirmations.length];
-  }
-
-  if (detectedSubject) {
-    return getSubjectHint(detectedSubject, message, turnCount);
-  }
-
-  if (turnCount === 0) {
-    const tomorrowReminder = tomorrowSubjects.length > 0
-      ? ` Mañana (${getTomorrowDayName()}) tienes: ${tomorrowSubjects.join(", ")}. Necesitas repasar cada una para desbloquear el entretenimiento.`
-      : "";
-    if (todaySubjects.length > 0) {
-      return `Hola Jefferson! Hoy es ${dayName} y tienes: ${todaySubjects.join(", ")}. ¿En cuál necesitas ayuda? No te daré las respuestas, pero sí buenas pistas. A las 7 PM tienes tiempo libre para juegos y redes.${tomorrowReminder}`;
+    // Detectar si pide respuesta directa — NUNCA dar la respuesta
+    const isAskingDirect =
+      lower.includes("respuesta") || lower.includes("solución") || lower.includes("solucion") ||
+      lower.includes("resultado") || lower.includes("cuánto es") || lower.includes("cuanto es") ||
+      lower.includes("cómo se hace") || lower.includes("como se hace") ||
+      lower.includes("dame la") || lower.includes("dime la") || lower.includes("dímela") ||
+      lower.includes("cuál es la respuesta") || lower.includes("cual es la respuesta") ||
+      lower.includes("resuélvelo") || lower.includes("resuelve") || lower.includes("hazlo tú") ||
+      lower.includes("hazlo tu") || lower.includes("tú hazlo") || lower.includes("tu hazlo");
+    if (isAskingDirect) {
+      return `No puedo darte la respuesta directa de ${currentSubject}, pero sí te guío. ${getSubjectHint(currentSubject, message, turn)} ¿Qué datos te da el enunciado? Empieza por ahí.`;
     }
-    return `Hola Jefferson! ¿En qué necesitas ayuda hoy? Cuéntame tu tarea y te guío. A las 7 PM tienes tiempo libre para todo.`;
+
+    // Detectar que Jefferson dice que entendió — pedir que explique con sus palabras antes de confirmar
+    const seemsToUnderstand =
+      lower.includes("entend") || lower.includes("ya sé") || lower.includes("ya se") ||
+      lower.includes("es correcto") || lower.includes("entonces es") || lower.includes("creo que es") ||
+      lower.includes("sería") || lower.includes("seria") || lower.includes("puede ser") ||
+      lower.includes("ya terminé") || lower.includes("ya termine") || lower.includes("listo");
+    if (seemsToUnderstand && turn >= 2) {
+      const checks = [
+        `Bien! Antes de darlo por terminado: explícame con tus propias palabras cómo resolviste el ejercicio de ${currentSubject}.`,
+        `Excelente. ¿Puedes contarme el proceso paso a paso que seguiste? Así confirmo que lo entendiste bien.`,
+        `Muy bien. Cuéntame qué aprendiste de este ejercicio de ${currentSubject}. Si me lo explicas correctamente, podemos pasar a la siguiente materia.`,
+      ];
+      return checks[turn % checks.length];
+    }
+
+    // Respuesta de tutor guiado para esa materia específica
+    return getSubjectHint(currentSubject, message, turn);
   }
 
+  // --- Sin materia activa: responder general ---
   const generalResponses = [
     "Cuéntame más sobre el ejercicio. ¿Qué dice exactamente el enunciado?",
-    "Interesante. ¿Qué ya intentaste hacer? Muéstrame tu proceso.",
-    "Para ayudarte mejor: ¿de qué materia es esto y qué pide exactamente?",
-    "Piensa: ¿qué información te da el problema? Lista los datos que tienes.",
+    "¿Qué ya intentaste hacer? Muéstrame tu proceso.",
+    "¿De qué materia es esto y qué pide exactamente?",
+    "Piensa: ¿qué datos te da el problema? Lístaloss primero.",
     "¿Viste algo similar en clase? Cuéntame cómo lo explicó tu profesor.",
-    "Buen intento. Si tuvieras que explicarle esto a un compañero, ¿por dónde empezarías?",
   ];
-  return generalResponses[turnCount % generalResponses.length];
+  return generalResponses[globalTurn % generalResponses.length];
 }
 
 function localChat(message: string, history: ChatMessage[], usageContext: Record<string, unknown>): string {
@@ -604,7 +625,9 @@ function localChat(message: string, history: ChatMessage[], usageContext: Record
   const mode = usageContext.modo_actual as string ?? "free";
 
   if (mode === "study" || mode === "school") {
-    return localStudyTutor(message, history);
+    const currentSubject = usageContext.current_subject as string | null ?? null;
+    const subjectTurnCount = usageContext.subject_turn_count as number ?? 0;
+    return localStudyTutor(message, history, currentSubject, subjectTurnCount);
   }
 
   if (isSimulacroQuestion(lower)) {
