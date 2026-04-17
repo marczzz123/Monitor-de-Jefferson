@@ -608,13 +608,41 @@ export function localStudyTutor(
     return getSubjectHint(currentSubject, message, turn);
   }
 
-  // --- Sin materia activa: responder general ---
+  // --- Sin materia activa: detectar si es pregunta conceptual/educativa ---
+  const isConceptualQuestion =
+    lower.startsWith("qué es") || lower.startsWith("que es") ||
+    lower.startsWith("qué son") || lower.startsWith("que son") ||
+    lower.startsWith("cómo funciona") || lower.startsWith("como funciona") ||
+    lower.startsWith("cómo se") || lower.startsWith("como se") ||
+    lower.startsWith("explica") || lower.startsWith("qué significa") ||
+    lower.startsWith("que significa") || lower.startsWith("por qué") ||
+    lower.startsWith("por que") || lower.startsWith("cuándo") ||
+    lower.startsWith("cuando") || lower.startsWith("quién") ||
+    lower.startsWith("quien") || lower.startsWith("cuál es") ||
+    lower.startsWith("cual es") || lower.startsWith("dónde") ||
+    lower.startsWith("donde") || lower.includes("qué es la") ||
+    lower.includes("que es la") || lower.includes("qué es el") ||
+    lower.includes("que es el") || lower.includes("qué es un") ||
+    lower.includes("que es un") || lower.includes("cómo se llama") ||
+    lower.includes("cómo se hace") || lower.includes("como se hace") ||
+    lower.includes("para qué sirve") || lower.includes("para que sirve");
+
+  if (isConceptualQuestion) {
+    // Intentar detectar la materia involucrada para dar una respuesta más útil
+    const detectedSub = detectSubject(message, ALL_SIMULACRO_SUBJECTS);
+    if (detectedSub) {
+      return `Buena pregunta sobre ${detectedSub}. ${getSubjectHint(detectedSub, message, globalTurn)} Si tienes un ejercicio específico de esta materia, cuéntame el enunciado y lo trabajamos juntos.`;
+    }
+    // Pregunta educativa general — responder útilmente y luego invitar a estudiar
+    return `Esa es una buena pregunta. Puedo ayudarte a entender ese tema. Explícame un poco más el contexto: ¿es un concepto que viste en clase o algo que necesitas para una tarea? Si me dices de qué materia es, te puedo dar una explicación más precisa.`;
+  }
+
+  // Respuesta para mensajes que no son ni conceptuales ni entretenimiento
   const generalResponses = [
-    "Cuéntame más sobre el ejercicio. ¿Qué dice exactamente el enunciado?",
-    "¿Qué ya intentaste hacer? Muéstrame tu proceso.",
-    "¿De qué materia es esto y qué pide exactamente?",
-    "Piensa: ¿qué datos te da el problema? Lístaloss primero.",
-    "¿Viste algo similar en clase? Cuéntame cómo lo explicó tu profesor.",
+    "Cuéntame más. ¿De qué materia es esto y qué necesitas exactamente?",
+    "¿Tienes un ejercicio o pregunta específica de alguna materia? Cuéntamelo y te ayudo.",
+    "¿De qué tema es tu pregunta? Con más contexto puedo ayudarte mejor.",
+    "Dime qué necesitas y lo vemos juntos. ¿Es una duda de alguna materia?",
   ];
   return generalResponses[globalTurn % generalResponses.length];
 }
