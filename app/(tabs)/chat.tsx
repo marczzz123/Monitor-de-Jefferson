@@ -225,16 +225,27 @@ export default function ChatScreen() {
           setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
           return;
         }
-        // No eligió número válido — recordarle el menú
-        const remindMsg: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: `Escribe el número de la materia que quieres estudiar:\n\n${getSubjectMenu(currentPending)}`,
-        };
-        setMessages(prev => [...prev, remindMsg]);
-        setLoading(false);
-        setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
-        return;
+        // Solo mostrar el menú de nuevo si Jefferson pide entretenimiento
+        // Para preguntas generales o educativas → dejar fluir al tutor IA normalmente
+        const lowerText = text.toLowerCase();
+        const isEntertainmentRequest =
+          lowerText.includes("jugar") || lowerText.includes("tiktok") ||
+          lowerText.includes("instagram") || lowerText.includes("youtube") ||
+          lowerText.includes("redes") || lowerText.includes("free fire") ||
+          lowerText.includes("roblox") || lowerText.includes("minecraft") ||
+          lowerText.includes("videojuego") || lowerText.includes("juego");
+        if (isEntertainmentRequest) {
+          const remindMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: `Primero termina las materias, después viene el entretenimiento.\n\n${getSubjectMenu(currentPending)}`,
+          };
+          setMessages(prev => [...prev, remindMsg]);
+          setLoading(false);
+          setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+          return;
+        }
+        // Pregunta general o educativa → continúa normalmente hacia el tutor IA
       }
 
       // FASE ESTUDIANDO: incrementar contador de turnos
