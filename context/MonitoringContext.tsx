@@ -64,8 +64,14 @@ export interface Schedule {
 }
 
 export const SOCIAL_PACKAGES = [
+  // TikTok — todas las variantes incluyendo Lite
   "com.zhiliaoapp.musically",
+  "com.zhiliaoapp.musically.go",
   "com.ss.android.ugc.trill",
+  "com.ss.android.ugc.trill.lite",
+  "com.tiktok.android",
+  "com.tiktok.lite",
+  // Instagram, Facebook, etc.
   "com.instagram.android",
   "com.facebook.katana",
   "com.twitter.android",
@@ -76,6 +82,33 @@ export const SOCIAL_PACKAGES = [
   "com.reddit.frontpage",
   "com.youtube.android",
   "com.google.android.youtube",
+];
+
+export const AI_PACKAGES = [
+  // ChatGPT
+  "com.openai.chatgpt",
+  // Google Gemini / Bard
+  "com.google.android.apps.bard",
+  "com.google.android.apps.gemini",
+  // Microsoft Copilot
+  "com.microsoft.copilot",
+  "com.microsoft.bing",
+  // Perplexity
+  "ai.perplexity.app.android",
+  // Claude
+  "com.anthropic.claude",
+  // Socratic (tarea con IA de Google)
+  "com.google.socratic",
+  // Photomath
+  "com.microblink.photomath",
+  // Brainly
+  "com.brainly.android",
+  // Chegg
+  "com.chegg",
+  // Gauth
+  "com.gauth.android",
+  // Question AI
+  "com.questionai.android",
 ];
 
 export const GAME_KEYWORDS = [
@@ -143,9 +176,20 @@ export function classifyPackage(packageName: string, appName: string): Monitored
   const pkg = packageName.toLowerCase();
   const name = appName.toLowerCase();
 
+  // Apps de IA — se bloquean en modo colegio y estudio
+  if (AI_PACKAGES.includes(pkg)) return "distraction";
+  if (pkg.includes("chatgpt") || pkg.includes("openai") || pkg.includes("gemini")
+    || pkg.includes("copilot") || pkg.includes("perplexity") || pkg.includes("claude")
+    || pkg.includes("photomath") || pkg.includes("brainly") || pkg.includes("chegg")
+    || pkg.includes("socratic") || pkg.includes("gauth") || pkg.includes("questionai")
+    || name.includes("chatgpt") || name.includes("gemini") || name.includes("copilot")
+    || name.includes("photomath") || name.includes("brainly") || name.includes("ia ")
+    || name.includes(" ia") || name.includes("artificial")) return "distraction";
+
   if (SOCIAL_PACKAGES.includes(pkg)) return "social";
-  if (pkg.includes("tiktok") || pkg.includes("instagram") || pkg.includes("snapchat")
-    || pkg.includes("facebook") || pkg.includes("twitter") || pkg.includes("whatsapp")) return "social";
+  if (pkg.includes("tiktok") || pkg.includes("musically") || pkg.includes("instagram")
+    || pkg.includes("snapchat") || pkg.includes("facebook") || pkg.includes("twitter")
+    || pkg.includes("whatsapp")) return "social";
 
   if (GAME_KEYWORDS.some((k) => pkg.includes(k) || name.includes(k))) return "game";
 
@@ -216,17 +260,18 @@ export function isModeBlocked(mode: AppMode, packageName: string, appName: strin
   if (mode === "sleep") return true;
   if (mode === "school") {
     if (category === "system" || category === "educational") return false;
-    return true;
+    return true; // juegos, social, distracción (IA) bloqueados
   }
   if (mode === "lunch") {
-    if (category === "social") return false;
+    if (category === "social") return false; // solo redes sociales permitidas
     if (category === "game") return true;
-    if (category === "distraction") return true;
+    if (category === "distraction") return true; // IA bloqueada en almuerzo
     return restrictedApps.includes(packageName);
   }
   if (mode === "study") {
     if (category === "game") return true;
     if (category === "social") return true;
+    if (category === "distraction") return true; // IA bloqueada en estudio
     if (category === "educational") return false;
     return restrictedApps.includes(packageName);
   }
@@ -305,14 +350,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [schedule, setSchedule] = useState<Schedule>({
     schoolStart: 7,
     schoolStartMin: 20,
-    schoolEnd: 14,
-    schoolEndMin: 30,
-    lunchEnd: 15,
+    schoolEnd: 15,      // colegio termina a las 3:00 PM
+    schoolEndMin: 0,
+    lunchEnd: 15,       // almuerzo: 3:00 PM → 3:30 PM
     lunchEndMin: 30,
-    gamesStart: 19,
+    gamesStart: 19,     // modo libre a partir de las 7:00 PM
     gamesStartMin: 0,
-    bedtime: 22,
-    bedtimeMin: 0,
+    bedtime: 22,        // modo dormir a las 10:30 PM
+    bedtimeMin: 30,
   });
   const [sensitivity, setSensitivity] = useState(2);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -338,11 +383,18 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
     if (isWeekday) {
-      // During study or free time: tasks are the ONLY gate for games
-      // If tasks done → free (everything unlocks including games)
-      // If tasks NOT done → study (games and social blocked)
       if (base === "study" || base === "free") {
-        return tasksCompletedRef.current ? "free" : "study";
+        const now2 = new Date();
+        const totalMin2 = now2.getHours() * 60 + now2.getMinutes();
+        const gamesStart = scheduleRef.current.gamesStart * 60 + (scheduleRef.current.gamesStartMin ?? 0);
+        const isAfterGamesTime = totalMin2 >= gamesStart;
+
+        // Modo libre requiere DOS condiciones:
+        // 1) Las tareas deben estar terminadas
+        // 2) Deben ser las 7 PM o más tarde
+        // Si termina a las 4 PM pero no son las 7 PM → sigue en modo estudio
+        if (tasksCompletedRef.current && isAfterGamesTime) return "free";
+        return "study";
       }
     }
 
@@ -384,14 +436,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           setSchedule({
             schoolStart: s.schoolStart ?? 7,
             schoolStartMin: s.schoolStartMin ?? 20,
-            schoolEnd: s.schoolEnd ?? 14,
-            schoolEndMin: s.schoolEndMin ?? 30,
+            schoolEnd: s.schoolEnd ?? 15,
+            schoolEndMin: s.schoolEndMin ?? 0,
             lunchEnd: s.lunchEnd ?? 15,
             lunchEndMin: s.lunchEndMin ?? 30,
             gamesStart: s.gamesStart ?? 19,
             gamesStartMin: s.gamesStartMin ?? 0,
             bedtime: s.bedtime ?? 22,
-            bedtimeMin: s.bedtimeMin ?? 0,
+            bedtimeMin: s.bedtimeMin ?? 30,
           });
         }
         if (typeof data.sensitivity === "number") setSensitivity(data.sensitivity);
