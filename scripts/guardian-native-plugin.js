@@ -387,31 +387,91 @@ const service = `package com.guardian.controlparental;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.provider.Settings;
 
 public class GuardianMonitoringService extends Service {
   private static final String CHANNEL_ID = "guardian_monitoring";
+  private static final String ALERT_CHANNEL_ID = "guardian_alert";
   private static final int NOTIFICATION_ID = 2001;
+  private static final int ACCESSIBILITY_NOTIF_ID = 2002;
 
   @Override
   public void onCreate() {
     super.onCreate();
-    createChannel();
+    createChannels();
     startForeground(NOTIFICATION_ID, buildNotification());
   }
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
     startForeground(NOTIFICATION_ID, buildNotification());
+    // Verificar si la accesibilidad sigue activa — si se desactivó al reiniciar, avisar
+    checkAccessibilityStatus();
     return START_STICKY;
   }
 
   @Override
   public IBinder onBind(Intent intent) {
     return null;
+  }
+
+  private void checkAccessibilityStatus() {
+    try {
+      String pkg = getPackageName();
+      String serviceId = pkg + "/." + "GuardianAccessibilityService";
+      String altId = pkg + "/" + pkg + ".GuardianAccessibilityService";
+      String enabled = Settings.Secure.getString(
+        getContentResolver(),
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+      );
+      boolean isEnabled = enabled != null && (enabled.contains(serviceId) || enabled.contains(altId));
+
+      NotificationManager nm = getSystemService(NotificationManager.class);
+      if (nm == null) return;
+
+      if (!isEnabled) {
+        // Accesibilidad desactivada — mostrar alerta persistente
+        Intent settingsIntent;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS);
+          settingsIntent.setData(android.net.Uri.parse("package:" + pkg));
+        } else {
+          settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        }
+        settingsIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        int piFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+          ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+          : PendingIntent.FLAG_UPDATE_CURRENT;
+        PendingIntent pi = PendingIntent.getActivity(this, 0, settingsIntent, piFlags);
+
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+          ? new Notification.Builder(this, ALERT_CHANNEL_ID)
+          : new Notification.Builder(this);
+
+        Notification alert = builder
+          .setSmallIcon(android.R.drawable.ic_dialog_alert)
+          .setContentTitle("⚠️ Guardian desactivado")
+          .setContentText("Toca aquí para reactivar el control parental en Accesibilidad.")
+          .setStyle(new Notification.BigTextStyle()
+            .bigText("El servicio de accesibilidad de Guardian se desactivó. El celular de Jefferson no está bajo control. Toca para reactivarlo."))
+          .setContentIntent(pi)
+          .setOngoing(true)
+          .setAutoCancel(false)
+          .setPriority(Notification.PRIORITY_MAX)
+          .build();
+
+        nm.notify(ACCESSIBILITY_NOTIF_ID, alert);
+      } else {
+        // Accesibilidad activa — cancelar alerta si existía
+        nm.cancel(ACCESSIBILITY_NOTIF_ID);
+      }
+    } catch (Exception ignored) {}
   }
 
   private Notification buildNotification() {
@@ -428,11 +488,19 @@ public class GuardianMonitoringService extends Service {
       .build();
   }
 
-  private void createChannel() {
+  private void createChannels() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Guardian monitoreo", NotificationManager.IMPORTANCE_LOW);
-      NotificationManager manager = getSystemService(NotificationManager.class);
-      if (manager != null) manager.createNotificationChannel(channel);
+      NotificationManager nm = getSystemService(NotificationManager.class);
+      if (nm == null) return;
+      NotificationChannel monitoring = new NotificationChannel(
+        CHANNEL_ID, "Guardian monitoreo", NotificationManager.IMPORTANCE_LOW
+      );
+      nm.createNotificationChannel(monitoring);
+      NotificationChannel alerts = new NotificationChannel(
+        ALERT_CHANNEL_ID, "Guardian Alertas", NotificationManager.IMPORTANCE_HIGH
+      );
+      alerts.setDescription("Alertas cuando el control parental se desactiva");
+      nm.createNotificationChannel(alerts);
     }
   }
 }
@@ -809,20 +877,107 @@ const deviceAdminConfig = `<?xml version="1.0" encoding="utf-8"?>
 
 const receiver = `package com.guardian.controlparental;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 
 public class GuardianBootReceiver extends BroadcastReceiver {
+  private static final String ALERT_CHANNEL_ID = "guardian_alert";
+  private static final int ACCESSIBILITY_NOTIF_ID = 2002;
+
   @Override
   public void onReceive(Context context, Intent intent) {
     if (intent == null || !Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
+
+    // 1. Reiniciar el servicio de monitoreo
     Intent serviceIntent = new Intent(context, GuardianMonitoringService.class);
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       context.startForegroundService(serviceIntent);
     } else {
       context.startService(serviceIntent);
+    }
+
+    // 2. Verificar accesibilidad después de que el sistema termine de arrancar
+    // Se espera 8 segundos para que Android termine de restaurar los servicios
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+      if (!isAccessibilityEnabled(context)) {
+        showAccessibilityAlert(context);
+      }
+    }, 8000);
+  }
+
+  private boolean isAccessibilityEnabled(Context context) {
+    try {
+      String pkg = context.getPackageName();
+      String serviceId = pkg + "/." + "GuardianAccessibilityService";
+      String altId = pkg + "/" + pkg + ".GuardianAccessibilityService";
+      String enabled = Settings.Secure.getString(
+        context.getContentResolver(),
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+      );
+      if (enabled == null || enabled.isEmpty()) return false;
+      return enabled.contains(serviceId) || enabled.contains(altId);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private void showAccessibilityAlert(Context context) {
+    try {
+      createAlertChannel(context);
+
+      // Intent para abrir ajustes de accesibilidad directamente en Guardian
+      Intent settingsIntent;
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS);
+        settingsIntent.setData(android.net.Uri.parse("package:" + context.getPackageName()));
+      } else {
+        settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+      }
+      settingsIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+      int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        : PendingIntent.FLAG_UPDATE_CURRENT;
+      PendingIntent pi = PendingIntent.getActivity(context, 0, settingsIntent, flags);
+
+      Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        ? new Notification.Builder(context, ALERT_CHANNEL_ID)
+        : new Notification.Builder(context);
+
+      Notification notif = builder
+        .setSmallIcon(android.R.drawable.ic_dialog_alert)
+        .setContentTitle("⚠️ Guardian desactivado")
+        .setContentText("El servicio de control parental se desactivó al reiniciar. Toca para reactivarlo.")
+        .setStyle(new Notification.BigTextStyle()
+          .bigText("El servicio de accesibilidad de Guardian se desactivó al reiniciar el celular. Toca esta notificación para ir a Ajustes y volver a activar Guardian."))
+        .setContentIntent(pi)
+        .setAutoCancel(false)
+        .setOngoing(true)
+        .setPriority(Notification.PRIORITY_MAX)
+        .build();
+
+      NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+      if (nm != null) nm.notify(ACCESSIBILITY_NOTIF_ID, notif);
+    } catch (Exception ignored) {}
+  }
+
+  private void createAlertChannel(Context context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      NotificationChannel ch = new NotificationChannel(
+        ALERT_CHANNEL_ID, "Guardian Alertas", NotificationManager.IMPORTANCE_HIGH
+      );
+      ch.setDescription("Alertas importantes de Guardian Control Parental");
+      NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+      if (nm != null) nm.createNotificationChannel(ch);
     }
   }
 }
