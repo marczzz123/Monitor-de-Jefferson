@@ -438,7 +438,7 @@ public class GuardianMonitoringService extends Service {
         // Accesibilidad desactivada — mostrar alerta persistente
         Intent settingsIntent;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-          settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS);
+          settingsIntent = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS");
           settingsIntent.setData(android.net.Uri.parse("package:" + pkg));
         } else {
           settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
@@ -937,7 +937,7 @@ public class GuardianBootReceiver extends BroadcastReceiver {
       // Intent para abrir ajustes de accesibilidad directamente en Guardian
       Intent settingsIntent;
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS);
+        settingsIntent = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS");
         settingsIntent.setData(android.net.Uri.parse("package:" + context.getPackageName()));
       } else {
         settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
