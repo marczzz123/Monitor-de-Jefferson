@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import MathKeyboard from "@/components/MathKeyboard";
 import { useMonitoring } from "@/context/MonitoringContext";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -27,7 +28,11 @@ import {
   getSubjectMenu,
   detectMenuSelection,
   getTutorIntro,
+  getSubjectExamQuestions,
+  checkExamAnswer,
+  isMathSubject,
   type ChatMessage,
+  type ExamQuestion,
   type NightChallenge,
   ALL_SIMULACRO_SUBJECTS,
 } from "@/services/ai";
@@ -37,7 +42,6 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   streaming?: boolean;
-  isHint?: boolean;
 }
 
 function getInitialMessage(mode: string, pendingSubjects: string[]): string {
@@ -46,7 +50,7 @@ function getInitialMessage(mode: string, pendingSubjects: string[]): string {
 
   if (mode === "study") {
     if (pendingSubjects.length > 0) {
-      return `Hola Jefferson! Es hora de estudiar. Hoy es ${dayName} y mañana (${tomorrowName}) tienes materias que repasar.\n\nNo te daré las respuestas directas — solo pistas para que tú mismo llegues a ellas. A las 7 PM tendrás tiempo libre, pero primero hay que terminar esto.\n\n${getSubjectMenu(pendingSubjects)}`;
+      return `Hola Jefferson! Es hora de estudiar. Hoy es ${dayName} y mañana (${tomorrowName}) tienes materias que repasar.\n\nTe daré las respuestas directas con su explicación. Pero al final de cada materia tomarás un EXAMEN FINAL: tienes que responder TODAS las preguntas correctamente para completar la materia y desbloquear el entretenimiento de las 7 PM.\n\n${getSubjectMenu(pendingSubjects)}`;
     }
     return `Hola Jefferson! ¡Ya terminaste todas las materias de mañana! A las 7 PM tienes tiempo libre.`;
   }
@@ -130,6 +134,104 @@ export default function ChatScreen() {
   const [nightChallengeResult, setNightChallengeResult] = useState<"none" | "correct" | "wrong">("none");
   const [nightChallengeUsed, setNightChallengeUsed] = useState(false);
   const [nightModalVisible, setNightModalVisible] = useState(false);
+
+  // Final exam state
+  const [examModalVisible, setExamModalVisible] = useState(false);
+  const [examQuestions, setExamQuestions] = useState<ExamQuestion[]>([]);
+  const [examIndex, setExamIndex] = useState(0);
+  const [examInput, setExamInput] = useState("");
+  const [examResults, setExamResults] = useState<boolean[]>([]);
+  const [examFeedback, setExamFeedback] = useState<"none" | "correct" | "wrong">("none");
+  const [examPhase, setExamPhase] = useState<"answering" | "summary">("answering");
+
+  const inputRef = useRef<TextInput>(null);
+  const examInputRef = useRef<TextInput>(null);
+
+  function insertAtInput(text: string) {
+    setInput(prev => prev + text);
+  }
+  function backspaceInput() {
+    setInput(prev => prev.slice(0, -1));
+  }
+  function insertAtExam(text: string) {
+    setExamInput(prev => prev + text);
+  }
+  function backspaceExam() {
+    setExamInput(prev => prev.slice(0, -1));
+  }
+
+  function openExam() {
+    if (!currentSubject) return;
+    const qs = getSubjectExamQuestions(currentSubject);
+    setExamQuestions(qs);
+    setExamIndex(0);
+    setExamInput("");
+    setExamResults([]);
+    setExamFeedback("none");
+    setExamPhase("answering");
+    setExamModalVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }
+
+  function submitExamAnswer() {
+    if (examPhase !== "answering") return;
+    const q = examQuestions[examIndex];
+    if (!q || !examInput.trim()) return;
+    const ok = checkExamAnswer(q.correctAnswer, examInput.trim());
+    setExamFeedback(ok ? "correct" : "wrong");
+    Haptics.notificationAsync(
+      ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
+    );
+    const newResults = [...examResults, ok];
+    setExamResults(newResults);
+
+    setTimeout(() => {
+      if (examIndex + 1 >= examQuestions.length) {
+        setExamPhase("summary");
+        setExamFeedback("none");
+        const allCorrect = newResults.every(r => r);
+        if (allCorrect && currentSubject) {
+          markSubjectDone(currentSubject);
+        }
+      } else {
+        setExamIndex(examIndex + 1);
+        setExamInput("");
+        setExamFeedback("none");
+      }
+    }, 1200);
+  }
+
+  function retryExam() {
+    setExamIndex(0);
+    setExamInput("");
+    setExamResults([]);
+    setExamFeedback("none");
+    setExamPhase("answering");
+  }
+
+  function closeExamAfterSuccess() {
+    if (!currentSubject) {
+      setExamModalVisible(false);
+      return;
+    }
+    const doneSubject = currentSubject;
+    setExamModalVisible(false);
+    setCurrentSubject(null);
+    setSubjectTurnCount(0);
+    setCanMarkDone(false);
+    setTutorPhase("menu");
+
+    const remaining = tomorrowSubjects.filter(s => !subjectsDone[s] && s !== doneSubject);
+    const successMsg: Message = {
+      id: Date.now().toString(),
+      role: "assistant",
+      content: remaining.length > 0
+        ? `¡Excelente! Pasaste el examen de ${doneSubject}. ✓\n\n${getSubjectMenu(remaining)}`
+        : `¡Felicitaciones Jefferson! Aprobaste todos los exámenes y completaste todas las materias. A las 7 PM tendrás tiempo libre.`,
+    };
+    setMessages(prev => [...prev, successMsg]);
+    setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+  }
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 + 16 : insets.bottom + 16;
@@ -218,7 +320,6 @@ export default function ChatScreen() {
             id: (Date.now() + 1).toString(),
             role: "assistant",
             content: getTutorIntro(selected),
-            isHint: true,
           };
           setMessages(prev => [...prev, introMsg]);
           setLoading(false);
@@ -266,7 +367,6 @@ export default function ChatScreen() {
       role: "assistant",
       content: "",
       streaming: true,
-      isHint: isStudyMode,
     };
     setMessages(prev => [...prev, asstMsg]);
 
@@ -315,12 +415,6 @@ export default function ChatScreen() {
           </View>
         )}
         <View>
-          {!isUser && item.isHint && (
-            <View style={[styles.hintLabel, { backgroundColor: colors.primary + "18" }]}>
-              <Feather name="lightbulb" size={10} color={colors.primary} />
-              <Text style={[styles.hintLabelText, { color: colors.primary }]}>Pista del tutor</Text>
-            </View>
-          )}
           <View style={[styles.bubble, {
             backgroundColor: isUser ? colors.primary : colors.card,
             borderColor: isUser ? colors.primary : colors.border,
@@ -394,10 +488,11 @@ export default function ChatScreen() {
               </Text>
               {canMarkDone && (
                 <TouchableOpacity
-                  onPress={handleMarkSubjectDone}
-                  style={[styles.doneBtn, { backgroundColor: colors.success }]}
+                  onPress={openExam}
+                  style={[styles.doneBtn, { backgroundColor: colors.primary }]}
                 >
-                  <Text style={styles.doneBtnText}>✓ Completar</Text>
+                  <Feather name="award" size={12} color="#fff" />
+                  <Text style={styles.doneBtnText}>Examen final</Text>
                 </TouchableOpacity>
               )}
             </>
@@ -419,8 +514,13 @@ export default function ChatScreen() {
         onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: true })}
       />
 
+      {isStudyMode && isMathSubject(currentSubject) && (
+        <MathKeyboard onInsert={insertAtInput} onBackspace={backspaceInput} />
+      )}
+
       <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: botPad }]}>
         <TextInput
+          ref={inputRef}
           style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border }]}
           placeholder={
             isStudyMode
@@ -522,6 +622,173 @@ export default function ChatScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL EXAMEN FINAL */}
+      <Modal
+        visible={examModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExamModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, maxHeight: "92%" }]}>
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIcon, { backgroundColor: colors.primary + "18" }]}>
+                <Feather name="award" size={22} color={colors.primary} />
+              </View>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                Examen final — {currentSubject}
+              </Text>
+              <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
+                {examPhase === "answering"
+                  ? `Pregunta ${examIndex + 1} de ${examQuestions.length}. Debes responder TODAS correctamente.`
+                  : "Resultado del examen"}
+              </Text>
+            </View>
+
+            {examPhase === "answering" && examQuestions[examIndex] && (
+              <>
+                <View style={[styles.questionBox, { backgroundColor: colors.muted }]}>
+                  <Text style={[styles.questionText, { color: colors.foreground }]}>
+                    {examQuestions[examIndex].question}
+                  </Text>
+                </View>
+
+                <TextInput
+                  ref={examInputRef}
+                  style={[styles.challengeInput, {
+                    backgroundColor: colors.muted,
+                    color: colors.foreground,
+                    borderColor: examFeedback === "correct" ? colors.success
+                      : examFeedback === "wrong" ? colors.destructive
+                      : colors.border,
+                  }]}
+                  placeholder="Tu respuesta..."
+                  placeholderTextColor={colors.mutedForeground}
+                  value={examInput}
+                  onChangeText={(t) => {
+                    setExamInput(t);
+                    setExamFeedback("none");
+                  }}
+                  autoFocus
+                  editable={examFeedback === "none"}
+                />
+
+                {examFeedback === "correct" && (
+                  <View style={[styles.resultBanner, { backgroundColor: colors.success + "18" }]}>
+                    <Feather name="check-circle" size={16} color={colors.success} />
+                    <Text style={[styles.resultText, { color: colors.success }]}>¡Correcto!</Text>
+                  </View>
+                )}
+                {examFeedback === "wrong" && (
+                  <View style={[styles.resultBanner, { backgroundColor: colors.destructive + "18" }]}>
+                    <Feather name="x-circle" size={16} color={colors.destructive} />
+                    <Text style={[styles.resultText, { color: colors.destructive }]}>
+                      Incorrecto. Respuesta: {examQuestions[examIndex].correctAnswer}
+                    </Text>
+                  </View>
+                )}
+
+                {isMathSubject(currentSubject) ? (
+                  <MathKeyboard
+                    onInsert={insertAtExam}
+                    onBackspace={backspaceExam}
+                    onSubmit={submitExamAnswer}
+                    submitLabel="Responder"
+                    submitDisabled={!examInput.trim() || examFeedback !== "none"}
+                  />
+                ) : (
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      onPress={() => setExamModalVisible(false)}
+                      style={[styles.cancelBtn, { backgroundColor: colors.muted }]}
+                    >
+                      <Text style={[styles.cancelBtnText, { color: colors.mutedForeground }]}>Salir</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={submitExamAnswer}
+                      disabled={!examInput.trim() || examFeedback !== "none"}
+                      style={[styles.submitBtn, {
+                        backgroundColor: examInput.trim() && examFeedback === "none" ? colors.primary : colors.muted,
+                      }]}
+                    >
+                      <Text style={[styles.submitBtnText, {
+                        color: examInput.trim() && examFeedback === "none" ? "#fff" : colors.mutedForeground,
+                      }]}>
+                        Responder
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+
+            {examPhase === "summary" && (
+              <>
+                {(() => {
+                  const correctCount = examResults.filter(r => r).length;
+                  const total = examQuestions.length;
+                  const allCorrect = correctCount === total;
+                  return (
+                    <>
+                      <View style={[styles.questionBox, {
+                        backgroundColor: allCorrect ? colors.success + "18" : colors.destructive + "18",
+                      }]}>
+                        <Text style={[styles.questionText, {
+                          color: allCorrect ? colors.success : colors.destructive,
+                          textAlign: "center",
+                        }]}>
+                          {allCorrect
+                            ? `¡Aprobado! ${correctCount}/${total} correctas`
+                            : `No aprobado: ${correctCount}/${total} correctas`}
+                        </Text>
+                        <Text style={{
+                          color: colors.mutedForeground,
+                          textAlign: "center",
+                          marginTop: 8,
+                          fontSize: 12,
+                        }}>
+                          {allCorrect
+                            ? `${currentSubject} marcada como completada.`
+                            : "Necesitas TODAS las respuestas correctas. Repite el examen."}
+                        </Text>
+                      </View>
+
+                      <View style={styles.modalActions}>
+                        {allCorrect ? (
+                          <TouchableOpacity
+                            onPress={closeExamAfterSuccess}
+                            style={[styles.submitBtn, { flex: 1, backgroundColor: colors.success }]}
+                          >
+                            <Text style={[styles.submitBtnText, { color: "#fff" }]}>Continuar</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <>
+                            <TouchableOpacity
+                              onPress={() => setExamModalVisible(false)}
+                              style={[styles.cancelBtn, { backgroundColor: colors.muted }]}
+                            >
+                              <Text style={[styles.cancelBtnText, { color: colors.mutedForeground }]}>
+                                Seguir estudiando
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={retryExam}
+                              style={[styles.submitBtn, { backgroundColor: colors.primary }]}
+                            >
+                              <Text style={[styles.submitBtnText, { color: "#fff" }]}>Repetir examen</Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
+                    </>
+                  );
+                })()}
               </>
             )}
           </View>

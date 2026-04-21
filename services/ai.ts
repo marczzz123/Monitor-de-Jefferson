@@ -331,25 +331,63 @@ export function detectMenuSelection(message: string, subjects: string[]): string
 
 export function getTutorIntro(subject: string): string {
   const intros: Record<string, string> = {
-    "Álgebra": "Vamos con **Álgebra**. Escríbeme el enunciado completo de tu ejercicio. Dime también qué intentaste hacer primero.",
-    "Aritmética": "Vamos con **Aritmética**. ¿Qué problema tienes? Escríbeme el enunciado y dime qué parte te está confundiendo.",
-    "Química": "Vamos con **Química**. Cuéntame qué ejercicio tienes. ¿Es sobre elementos, reacciones, fórmulas o la tabla periódica?",
-    "Geometría": "Vamos con **Geometría**. Descríbeme la figura o el problema que tienes. ¿Qué datos te dan?",
-    "Trigonometría": "Vamos con **Trigonometría**. Escríbeme el ejercicio. ¿Qué ángulos o funciones están involucrados?",
-    "Razonamiento Matemático": "Vamos con **Razonamiento Matemático**. ¿Qué tipo de problema tienes? ¿Serie, patrón o problema de lógica?",
-    "Geografía": "Vamos con **Geografía**. ¿Qué tema te tocó? ¿Es sobre el Perú, el mundo, climas o accidentes geográficos?",
-    "Historia del Perú": "Vamos con **Historia del Perú**. ¿Qué época o tema tienes que estudiar? Cuéntame.",
-    "Historia Universal": "Vamos con **Historia Universal**. ¿De qué época o evento es tu tarea?",
-    "Inglés": "Let's work on **Inglés**. ¿Es gramática, vocabulario o comprensión de lectura? Escríbeme el ejercicio exacto.",
-    "Biología": "Vamos con **Biología**. ¿El tema es sobre células, el cuerpo humano, ecosistemas o reproducción?",
-    "Lenguaje": "Vamos con **Lenguaje**. ¿Es análisis de oraciones, gramática u ortografía? Escríbeme el ejercicio.",
-    "Literatura": "Vamos con **Literatura**. ¿Qué obra o autor tienes que analizar? Cuéntame el tema.",
-    "Razonamiento Verbal": "Vamos con **Razonamiento Verbal**. ¿Tienes analogías, sinónimos, antónimos o comprensión de texto?",
-    "Ed. Cívica": "Vamos con **Ed. Cívica**. ¿El tema es sobre derechos, el Estado peruano o la Constitución?",
-    "Religión": "Vamos con **Religión**. ¿Qué tema te asignaron? Cuéntame y lo trabajamos.",
-    "Cómputo": "Vamos con **Cómputo**. ¿Es sobre hardware, software, internet o algo práctico de computación?",
+    "Álgebra": "Vamos con **Álgebra**. Escríbeme el ejercicio y te doy la respuesta con la explicación paso a paso. Cuando termines, tendrás un examen final con todas las preguntas: debes responder TODAS correctamente para completar la materia.",
+    "Aritmética": "Vamos con **Aritmética**. Cuéntame el problema y te lo resuelvo explicando cada paso. Al final, tendrás un examen — solo se completa la materia si respondes TODO correcto.",
+    "Química": "Vamos con **Química**. Pregúntame lo que necesites y te doy la respuesta con la explicación. Al terminar, hay un examen final: TODAS las preguntas correctas para marcarla como completada.",
+    "Geometría": "Vamos con **Geometría**. Descríbeme el problema y te doy la respuesta con la fórmula y los pasos. Al final tendrás un examen — todo correcto para completar la materia.",
+    "Trigonometría": "Vamos con **Trigonometría**. Escríbeme el ejercicio y te doy la respuesta directa con la explicación. Al terminar, examen final con TODAS correctas para completar.",
+    "Razonamiento Matemático": "Vamos con **Razonamiento Matemático**. Escríbeme el problema y te doy la respuesta y el razonamiento. Al final, examen — todas correctas para completar la materia.",
+    "Geografía": "Vamos con **Geografía**. Pregúntame y te doy la respuesta con explicación. Al final hay examen: TODAS correctas para completar la materia.",
+    "Historia del Perú": "Vamos con **Historia del Perú**. Pregúntame lo que quieras y te respondo directamente. Al terminar, examen final con todas correctas para completar.",
+    "Historia Universal": "Vamos con **Historia Universal**. Pregúntame y te doy la respuesta con contexto. Al final, examen — TODAS correctas para completar.",
+    "Inglés": "Let's work on **Inglés**. Pregúntame lo que necesites y te doy la respuesta con la explicación. Al terminar tendrás un examen — todo correcto para completar la materia.",
+    "Biología": "Vamos con **Biología**. Pregúntame y te respondo directamente con la explicación. Al final, examen con TODAS correctas para completar.",
+    "Lenguaje": "Vamos con **Lenguaje**. Pregúntame y te doy la respuesta con la explicación gramatical. Al terminar, examen — todas correctas para completar.",
+    "Literatura": "Vamos con **Literatura**. Pregúntame y te respondo directamente. Al final, examen final con TODAS correctas para completar la materia.",
+    "Razonamiento Verbal": "Vamos con **Razonamiento Verbal**. Pregúntame y te doy la respuesta con la explicación. Al terminar, examen — todas correctas para completar.",
+    "Ed. Cívica": "Vamos con **Ed. Cívica**. Pregúntame y te respondo directamente. Al final, examen con TODAS correctas para completar.",
+    "Religión": "Vamos con **Religión**. Pregúntame lo que quieras y te respondo. Al terminar, examen final — todas correctas para completar.",
+    "Cómputo": "Vamos con **Cómputo**. Pregúntame y te doy la respuesta con la explicación. Al final tendrás un examen — todo correcto para completar la materia.",
   };
-  return intros[subject] ?? `Vamos con **${subject}**. Cuéntame qué ejercicio o tema tienes de tarea. No te daré la respuesta directa, pero sí pistas para que tú mismo llegues a ella.`;
+  return intros[subject] ?? `Vamos con **${subject}**. Pregúntame lo que necesites y te respondo directamente con la explicación. Cuando termines, tendrás un examen final: debes responder TODAS las preguntas correctamente para completar la materia.`;
+}
+
+// =============================================
+// EXAMEN FINAL — Preguntas por materia
+// Reutiliza el banco de preguntas del reto nocturno.
+// El estudiante debe responder TODAS correctamente para completar la materia.
+// =============================================
+
+export interface ExamQuestion {
+  question: string;
+  correctAnswer: string;
+}
+
+export function getSubjectExamQuestions(subject: string): ExamQuestion[] {
+  const pool = NIGHT_CHALLENGE_QUESTIONS[subject];
+  if (!pool || pool.length === 0) {
+    return [
+      { question: `¿Estudiaste el tema principal de ${subject} hoy? Escribe "sí" para confirmar.`, correctAnswer: "sí" },
+    ];
+  }
+  return pool.map(q => ({ question: q.q, correctAnswer: q.a }));
+}
+
+export function checkExamAnswer(correctAnswer: string, userAnswer: string): boolean {
+  return checkNightChallengeAnswer(correctAnswer, userAnswer);
+}
+
+const MATH_SUBJECTS = new Set([
+  "Álgebra",
+  "Aritmética",
+  "Geometría",
+  "Trigonometría",
+  "Razonamiento Matemático",
+]);
+
+export function isMathSubject(subject: string | null | undefined): boolean {
+  if (!subject) return false;
+  return MATH_SUBJECTS.has(subject);
 }
 
 // =============================================
@@ -576,36 +614,13 @@ export function localStudyTutor(
       return `Primero terminemos con ${currentSubject}. Después pasamos a ${mentionedSubject}. ¿Qué ejercicio tienes de ${currentSubject}?`;
     }
 
-    // Detectar si pide respuesta directa — NUNCA dar la respuesta
-    const isAskingDirect =
-      lower.includes("respuesta") || lower.includes("solución") || lower.includes("solucion") ||
-      lower.includes("resultado") || lower.includes("cuánto es") || lower.includes("cuanto es") ||
-      lower.includes("cómo se hace") || lower.includes("como se hace") ||
-      lower.includes("dame la") || lower.includes("dime la") || lower.includes("dímela") ||
-      lower.includes("cuál es la respuesta") || lower.includes("cual es la respuesta") ||
-      lower.includes("resuélvelo") || lower.includes("resuelve") || lower.includes("hazlo tú") ||
-      lower.includes("hazlo tu") || lower.includes("tú hazlo") || lower.includes("tu hazlo");
-    if (isAskingDirect) {
-      return `No puedo darte la respuesta directa de ${currentSubject}, pero sí te guío. ${getSubjectHint(currentSubject, message, turn)} ¿Qué datos te da el enunciado? Empieza por ahí.`;
-    }
-
-    // Detectar que Jefferson dice que entendió — pedir que explique con sus palabras antes de confirmar
-    const seemsToUnderstand =
-      lower.includes("entend") || lower.includes("ya sé") || lower.includes("ya se") ||
-      lower.includes("es correcto") || lower.includes("entonces es") || lower.includes("creo que es") ||
-      lower.includes("sería") || lower.includes("seria") || lower.includes("puede ser") ||
-      lower.includes("ya terminé") || lower.includes("ya termine") || lower.includes("listo");
-    if (seemsToUnderstand && turn >= 2) {
-      const checks = [
-        `Bien! Antes de darlo por terminado: explícame con tus propias palabras cómo resolviste el ejercicio de ${currentSubject}.`,
-        `Excelente. ¿Puedes contarme el proceso paso a paso que seguiste? Así confirmo que lo entendiste bien.`,
-        `Muy bien. Cuéntame qué aprendiste de este ejercicio de ${currentSubject}. Si me lo explicas correctamente, podemos pasar a la siguiente materia.`,
-      ];
-      return checks[turn % checks.length];
-    }
-
-    // Respuesta de tutor guiado para esa materia específica
-    return getSubjectHint(currentSubject, message, turn);
+    // Modo respuesta directa: explicar el tema y recordarle el examen final
+    const reminders = [
+      `Cuando te sientas listo, presiona "Examen final" arriba. Recuerda: tienes que responder TODAS las preguntas correctamente para completar ${currentSubject}.`,
+      `Sigue practicando. Cuando estés seguro, toma el examen final de ${currentSubject} — debes acertar TODAS para marcar la materia como completada.`,
+      `Buen avance. Cuando estés preparado, toma el examen final de ${currentSubject}. Recuerda: TODAS correctas para completar.`,
+    ];
+    return `${getSubjectHint(currentSubject, message, turn)}\n\n${reminders[turn % reminders.length]}`;
   }
 
   // --- Sin materia activa: detectar si es pregunta conceptual/educativa ---
