@@ -1,7 +1,7 @@
 import type { AppMode } from "@/context/MonitoringContext";
 import { classifyPackage, isModeBlocked } from "@/context/MonitoringContext";
 
-const DEFAULT_DOMAIN = "65ae1e57-ce4b-43b0-9d1f-9542faa4438c-00-13hw12onhg5rz.picard.replit.dev";
+const DEFAULT_DOMAIN = "46e1f9d7-61a8-4d5f-bcd0-d6b80b6730dd-00-1ybrkxwcapexl.spock.replit.dev";
 const configuredDomain = process.env.EXPO_PUBLIC_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/$/, "");
 const BASE = `https://${configuredDomain || DEFAULT_DOMAIN}`;
 
@@ -662,34 +662,8 @@ export function localStudyTutor(
   return generalResponses[globalTurn % generalResponses.length];
 }
 
-function localChat(message: string, history: ChatMessage[], usageContext: Record<string, unknown>): string {
-  const usage = Array.isArray(usageContext.uso_hoy) ? usageContext.uso_hoy : [];
-  const lower = message.toLowerCase();
-  const mode = usageContext.modo_actual as string ?? "free";
-
-  if (mode === "study" || mode === "school") {
-    const currentSubject = usageContext.current_subject as string | null ?? null;
-    const subjectTurnCount = usageContext.subject_turn_count as number ?? 0;
-    return localStudyTutor(message, history, currentSubject, subjectTurnCount);
-  }
-
-  if (isSimulacroQuestion(lower)) {
-    return getSimulacroResponse(message, history);
-  }
-
-  if (usage.length === 0) {
-    return "Todavía no veo actividad del dispositivo. Activa el permiso de uso de apps y vuelve a iniciar el monitoreo.";
-  }
-
-  if (lower.includes("uso") || lower.includes("tiempo") || lower.includes("app")) {
-    const summary = usage.slice(0, 3).map((e) => {
-      const item = e as { app?: string; minutos?: number };
-      return `${item.app ?? "App"}: ${item.minutos ?? 0} min`;
-    }).join(", ");
-    return `Veo estas apps con actividad hoy: ${summary}. Puedes marcar como restringidas las que sean distracción.`;
-  }
-
-  return "Estoy conectado. Puedo ayudarte con tareas, el simulacro o revisar el uso de apps. ¿Qué necesitas?";
+function localChat(_message: string, _history: ChatMessage[], _usageContext: Record<string, unknown>): string {
+  return "No pude conectarme con la IA en este momento. Revisa tu internet y vuelve a intentarlo en unos segundos.";
 }
 
 async function emitLocalReply(text: string, onChunk: (text: string) => void, onDone: () => void) {

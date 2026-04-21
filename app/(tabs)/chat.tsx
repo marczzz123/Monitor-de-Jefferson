@@ -568,10 +568,6 @@ export default function ChatScreen() {
                 <View style={[styles.questionBox, { backgroundColor: colors.muted }]}>
                   <Text style={[styles.questionSubject, { color: colors.primary }]}>{nightChallenge.subject}</Text>
                   <Text style={[styles.questionText, { color: colors.foreground }]}>{nightChallenge.question}</Text>
-                  <View style={[styles.hintBox, { backgroundColor: "#6366F110" }]}>
-                    <Feather name="lightbulb" size={12} color="#6366F1" />
-                    <Text style={[styles.hintText, { color: "#6366F1" }]}>Pista: {nightChallenge.hint}</Text>
-                  </View>
                 </View>
 
                 <TextInput
@@ -601,7 +597,7 @@ export default function ChatScreen() {
                 {nightChallengeResult === "wrong" && (
                   <View style={[styles.resultBanner, { backgroundColor: colors.destructive + "18" }]}>
                     <Feather name="x-circle" size={16} color={colors.destructive} />
-                    <Text style={[styles.resultText, { color: colors.destructive }]}>Intenta de nuevo. Revisa la pista.</Text>
+                    <Text style={[styles.resultText, { color: colors.destructive }]}>Respuesta incorrecta. Intenta de nuevo.</Text>
                   </View>
                 )}
 

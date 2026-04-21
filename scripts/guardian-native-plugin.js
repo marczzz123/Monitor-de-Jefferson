@@ -722,7 +722,16 @@ public class GuardianAccessibilityService extends AccessibilityService {
       return; // No bloquear el navegador en sí, solo la URL
     }
 
-    // 4. Apps del sistema puras → siempre permitidas
+    // 4a. Bloqueo permanente de Ajustes de Android (para que no se desactive accesibilidad)
+    //     Solo se permite si el monitoreo esta desactivado.
+    if ("com.android.settings".equals(packageName)
+        || "com.google.android.permissioncontroller".equals(packageName)
+        || "com.android.settings.intelligence".equals(packageName)) {
+      blockNow(packageName, mode);
+      return;
+    }
+
+    // 4b. Apps del sistema puras → siempre permitidas
     if (isSystemApp(packageName)) return;
 
     Set<String> restricted = new HashSet<>(prefs.getStringSet(RESTRICTED_KEY, Collections.<String>emptySet()));
