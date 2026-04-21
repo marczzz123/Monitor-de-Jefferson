@@ -738,18 +738,46 @@ public class GuardianAccessibilityService extends AccessibilityService {
       shouldBlock = restricted.contains(packageName);
     }
 
-    if (shouldBlock) blockNow(packageName);
+    if (shouldBlock) blockNow(packageName, mode);
   }
 
   @Override
   public void onInterrupt() {}
 
-  private void blockNow(String packageName) {
+  private void blockNow(String packageName, String mode) {
     long now = SystemClock.elapsedRealtime();
     if (packageName.equals(lastBlockedPackage) && now - lastBlockAt < 1500) return;
     lastBlockedPackage = packageName;
     lastBlockAt = now;
-    performGlobalAction(GLOBAL_ACTION_HOME);
+    launchBlockedScreen(packageName, mode);
+  }
+
+  private void launchBlockedScreen(String packageName, String mode) {
+    try {
+      String uri = "control-parental:///blocked?pkg=" + android.net.Uri.encode(packageName)
+          + "&mode=" + android.net.Uri.encode(mode == null ? "free" : mode)
+          + "&t=" + System.currentTimeMillis();
+      Intent intent = new Intent(Intent.ACTION_VIEW);
+      intent.setData(android.net.Uri.parse(uri));
+      intent.setPackage(getPackageName());
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+          | Intent.FLAG_ACTIVITY_CLEAR_TOP
+          | Intent.FLAG_ACTIVITY_SINGLE_TOP
+          | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+      startActivity(intent);
+    } catch (Exception e) {
+      try {
+        Intent fallback = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (fallback != null) {
+          fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+          startActivity(fallback);
+        } else {
+          performGlobalAction(GLOBAL_ACTION_HOME);
+        }
+      } catch (Exception ignored) {
+        performGlobalAction(GLOBAL_ACTION_HOME);
+      }
+    }
   }
 
 

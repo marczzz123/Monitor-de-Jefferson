@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -192,9 +193,18 @@ export default function DashboardScreen() {
             </Text>
           </View>
         </View>
-        <View style={[styles.activeChip, { backgroundColor: colors.success + "18" }]}>
-          <Feather name="shield" size={14} color={colors.success} />
-          <Text style={[styles.activeChipText, { color: colors.success }]}>IA activa</Text>
+        <View style={styles.headerRight}>
+          <View style={[styles.activeChip, { backgroundColor: colors.success + "18" }]}>
+            <Feather name="shield" size={14} color={colors.success} />
+            <Text style={[styles.activeChipText, { color: colors.success }]}>IA activa</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => router.push("/(tabs)/settings")}
+            style={[styles.gearBtn, { backgroundColor: colors.muted }]}
+            accessibilityLabel="Ajustes"
+          >
+            <Feather name="settings" size={16} color={colors.foreground} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -353,6 +363,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1 },
   headerLeft: { gap: 4 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  gearBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   statusText: { fontSize: 13, fontFamily: "Inter_400Regular" },

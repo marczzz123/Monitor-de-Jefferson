@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Platform,
@@ -6,6 +7,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -13,6 +15,79 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getModeLabel, useMonitoring, type AppMode, type Schedule } from "@/context/MonitoringContext";
 import { useColors } from "@/hooks/useColors";
+import { ADMIN_PASSWORD, useAdminLock } from "@/services/adminLock";
+
+function formatCountdown(ms: number) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function AdminGate({ onUnlock }: { onUnlock: () => void }) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(false);
+
+  function tryUnlock() {
+    if (password.trim() === ADMIN_PASSWORD) {
+      setError(false);
+      setPassword("");
+      onUnlock();
+    } else {
+      setError(true);
+    }
+  }
+
+  return (
+    <View style={[styles.gateRoot, { backgroundColor: colors.background, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.gateTopBar}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.gateBack, { backgroundColor: colors.muted }]}>
+          <Feather name="x" size={18} color={colors.foreground} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.gateContent}>
+        <View style={[styles.gateIconWrap, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "40" }]}>
+          <Feather name="shield" size={48} color={colors.primary} />
+        </View>
+        <Text style={[styles.gateTitle, { color: colors.foreground }]}>Acceso de administrador</Text>
+        <Text style={[styles.gateSub, { color: colors.mutedForeground }]}>
+          Ingresa la contrasena para entrar a Ajustes. El acceso dura 5 minutos y luego se vuelve a bloquear automaticamente.
+        </Text>
+
+        <TextInput
+          value={password}
+          onChangeText={(t) => { setPassword(t); setError(false); }}
+          placeholder="Contrasena"
+          placeholderTextColor={colors.mutedForeground}
+          secureTextEntry
+          keyboardType="number-pad"
+          style={[
+            styles.gateInput,
+            {
+              backgroundColor: colors.card,
+              color: colors.foreground,
+              borderColor: error ? colors.destructive : colors.border,
+            },
+          ]}
+          autoFocus
+          onSubmitEditing={tryUnlock}
+          returnKeyType="go"
+        />
+        {error ? (
+          <Text style={[styles.gateError, { color: colors.destructive }]}>Contrasena incorrecta</Text>
+        ) : null}
+
+        <TouchableOpacity onPress={tryUnlock} style={[styles.gateBtn, { backgroundColor: colors.primary }]}>
+          <Feather name="unlock" size={16} color="#fff" />
+          <Text style={styles.gateBtnText}>Desbloquear Ajustes</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 function HourMinPicker({
   hour, minute, onChangeHour, onChangeMin, colors,
@@ -62,6 +137,7 @@ function SectionCard({ icon, title, children, colors }: { icon: string; title: s
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const adminLock = useAdminLock();
   const {
     allApps, restrictedApps, toggleRestrictedApp,
     schedule, updateSchedule, sensitivity, updateSensitivity,
@@ -70,6 +146,10 @@ export default function SettingsScreen() {
   } = useMonitoring();
 
   const [filterCategory, setFilterCategory] = useState<string>("all");
+
+  if (!adminLock.unlocked) {
+    return <AdminGate onUnlock={adminLock.unlock} />;
+  }
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : 0;
@@ -110,6 +190,17 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
+
+        {/* BANNER DE DESBLOQUEO */}
+        <View style={[styles.unlockBanner, { backgroundColor: colors.success + "12", borderColor: colors.success + "40" }]}>
+          <Feather name="unlock" size={16} color={colors.success} />
+          <Text style={[styles.unlockBannerText, { color: colors.foreground }]}>
+            Acceso desbloqueado · {formatCountdown(adminLock.msLeft)}
+          </Text>
+          <TouchableOpacity onPress={adminLock.lock} style={[styles.unlockBannerBtn, { backgroundColor: colors.muted }]}>
+            <Text style={[styles.unlockBannerBtnText, { color: colors.foreground }]}>Bloquear</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* RESUMEN ADMIN */}
         <SectionCard icon="activity" title="Resumen del dia" colors={colors}>
@@ -338,6 +429,21 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  gateRoot: { flex: 1, paddingHorizontal: 24 },
+  gateTopBar: { flexDirection: "row", justifyContent: "flex-end" },
+  gateBack: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  gateContent: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
+  gateIconWrap: { width: 96, height: 96, borderRadius: 48, alignItems: "center", justifyContent: "center", borderWidth: 2, marginBottom: 8 },
+  gateTitle: { fontSize: 22, fontFamily: "Inter_700Bold", textAlign: "center", letterSpacing: -0.4 },
+  gateSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 19, paddingHorizontal: 8 },
+  gateInput: { width: "100%", borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontFamily: "Inter_500Medium", textAlign: "center", letterSpacing: 4, marginTop: 8 },
+  gateError: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  gateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 18, paddingVertical: 13, borderRadius: 12, width: "100%", marginTop: 4 },
+  gateBtnText: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  unlockBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 4 },
+  unlockBannerText: { flex: 1, fontSize: 12, fontFamily: "Inter_500Medium" },
+  unlockBannerBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  unlockBannerBtnText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   root: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1 },
   headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },

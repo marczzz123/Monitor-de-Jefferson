@@ -25,6 +25,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="blocked" options={{ headerShown: false, gestureEnabled: false, animation: "fade" }} />
     </Stack>
   );
 }
