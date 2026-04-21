@@ -511,7 +511,9 @@ const accessibilityService = `package com.guardian.controlparental;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.SystemClock;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -692,7 +694,7 @@ public class GuardianAccessibilityService extends AccessibilityService {
       if (event.getText() != null) {
         for (CharSequence text : event.getText()) {
           if (text != null && isBlockedUrl(text.toString())) {
-            blockNow(packageName);
+            blockNow(packageName, mode);
             return;
           }
         }
@@ -700,7 +702,7 @@ public class GuardianAccessibilityService extends AccessibilityService {
       // Chequear la descripción del contenido
       CharSequence desc = event.getContentDescription();
       if (desc != null && isBlockedUrl(desc.toString())) {
-        blockNow(packageName);
+        blockNow(packageName, mode);
         return;
       }
       // Chequear árbol de nodos (URL bar)
@@ -711,7 +713,7 @@ public class GuardianAccessibilityService extends AccessibilityService {
             String foundUrl = findUrlInTree(root, 0);
             root.recycle();
             if (foundUrl != null && isBlockedUrl(foundUrl)) {
-              blockNow(packageName);
+              blockNow(packageName, mode);
               return;
             }
           }
