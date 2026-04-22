@@ -126,6 +126,7 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
   private static final String RESTRICTED_KEY = "restricted_packages";
   private static final String MONITORING_KEY = "monitoring_enabled";
   private static final String MODE_KEY = "current_mode";
+  private static final String SETTINGS_UNLOCK_KEY = "settings_unlocked_until";
   private final ReactApplicationContext reactContext;
 
   public GuardianDeviceAppsModule(ReactApplicationContext reactContext) {
@@ -304,6 +305,29 @@ public class GuardianDeviceAppsModule extends ReactContextBaseJavaModule {
       promise.resolve(dpm != null && dpm.isAdminActive(adminComponent));
     } catch (Exception e) {
       promise.resolve(false);
+    }
+  }
+
+  @ReactMethod
+  public void unlockSettings(double durationMs, Promise promise) {
+    try {
+      long until = System.currentTimeMillis() + (long) durationMs;
+      getPrefs().edit().putLong(SETTINGS_UNLOCK_KEY, until).apply();
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("UNLOCK_SETTINGS_ERROR", e);
+    }
+  }
+
+  @ReactMethod
+  public void openSystemSettings(Promise promise) {
+    try {
+      Intent intent = new Intent(Settings.ACTION_SETTINGS);
+      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      reactContext.startActivity(intent);
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("OPEN_SETTINGS_ERROR", e);
     }
   }
 
@@ -528,8 +552,14 @@ public class GuardianAccessibilityService extends AccessibilityService {
   private static final String RESTRICTED_KEY = "restricted_packages";
   private static final String MONITORING_KEY = "monitoring_enabled";
   private static final String MODE_KEY = "current_mode";
+  private static final String SETTINGS_UNLOCK_KEY = "settings_unlocked_until";
   private long lastBlockAt = 0;
   private String lastBlockedPackage = "";
+
+  private boolean isSettingsUnlocked(SharedPreferences prefs) {
+    long until = prefs.getLong(SETTINGS_UNLOCK_KEY, 0L);
+    return until > 0 && System.currentTimeMillis() < until;
+  }
 
   private static final List<String> LUNCH_ALLOWED = Arrays.asList(
     "com.zhiliaoapp.musically",
@@ -612,9 +642,12 @@ public class GuardianAccessibilityService extends AccessibilityService {
 
     String mode = prefs.getString(MODE_KEY, "free");
 
+    // 0. Si el admin desbloqueó Ajustes con su contraseña, permitir todo dentro de Ajustes.
+    boolean settingsUnlocked = isSettingsUnlocked(prefs);
+
     // 1. PROTECCION DE ACCESIBILIDAD: bloquear intentos de desactivar el servicio
     // Solo se activa en cambios de ventana — NO en clics, para no bloquear la activación
-    if (isSettingsApp(packageName) &&
+    if (!settingsUnlocked && isSettingsApp(packageName) &&
         (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
       String className = event.getClassName() != null ? event.getClassName().toString() : "";
       boolean isAccessibilityScreen = false;
@@ -723,10 +756,11 @@ public class GuardianAccessibilityService extends AccessibilityService {
     }
 
     // 4a. Bloqueo permanente de Ajustes de Android (para que no se desactive accesibilidad)
-    //     Solo se permite si el monitoreo esta desactivado.
-    if ("com.android.settings".equals(packageName)
+    //     Solo se permite si el monitoreo esta desactivado o el admin desbloqueó Ajustes.
+    if (!settingsUnlocked && (
+        "com.android.settings".equals(packageName)
         || "com.google.android.permissioncontroller".equals(packageName)
-        || "com.android.settings.intelligence".equals(packageName)) {
+        || "com.android.settings.intelligence".equals(packageName))) {
       blockNow(packageName, mode);
       return;
     }

@@ -23,6 +23,8 @@ interface GuardianDeviceAppsModule {
   stopMonitoringService: () => Promise<boolean>;
   isDeviceAdminActive: () => Promise<boolean>;
   activateDeviceAdmin: () => Promise<boolean>;
+  unlockSettings: (durationMs: number) => Promise<boolean>;
+  openSystemSettings: () => Promise<boolean>;
 }
 
 const nativeModule = NativeModules.GuardianDeviceApps as GuardianDeviceAppsModule | undefined;
@@ -75,4 +77,14 @@ export async function isDeviceAdminActive(): Promise<boolean> {
 export async function activateDeviceAdmin(): Promise<boolean> {
   if (Platform.OS !== "android" || !nativeModule?.activateDeviceAdmin) return false;
   return nativeModule.activateDeviceAdmin();
+}
+
+export async function unlockSettings(durationMs: number): Promise<boolean> {
+  if (Platform.OS !== "android" || !nativeModule?.unlockSettings) return false;
+  return nativeModule.unlockSettings(durationMs);
+}
+
+export async function openSystemSettings(): Promise<boolean> {
+  if (Platform.OS !== "android" || !nativeModule?.openSystemSettings) return false;
+  return nativeModule.openSystemSettings();
 }

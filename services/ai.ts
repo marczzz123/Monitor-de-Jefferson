@@ -1,7 +1,7 @@
 import type { AppMode } from "@/context/MonitoringContext";
 import { classifyPackage, isModeBlocked } from "@/context/MonitoringContext";
 
-const DEFAULT_DOMAIN = "46e1f9d7-61a8-4d5f-bcd0-d6b80b6730dd-00-1ybrkxwcapexl.spock.replit.dev";
+const DEFAULT_DOMAIN = "guardian-jefferson-api.replit.app";
 const configuredDomain = process.env.EXPO_PUBLIC_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/$/, "");
 const BASE = `https://${configuredDomain || DEFAULT_DOMAIN}`;
 
