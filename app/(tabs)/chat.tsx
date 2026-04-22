@@ -29,6 +29,7 @@ import {
   detectMenuSelection,
   getTutorIntro,
   getSubjectExamQuestions,
+  generateExamQuestions,
   checkExamAnswer,
   isMathSubject,
   type ChatMessage,
@@ -143,6 +144,7 @@ export default function ChatScreen() {
   const [examResults, setExamResults] = useState<boolean[]>([]);
   const [examFeedback, setExamFeedback] = useState<"none" | "correct" | "wrong">("none");
   const [examPhase, setExamPhase] = useState<"answering" | "summary">("answering");
+  const [examLoading, setExamLoading] = useState(false);
 
   const inputRef = useRef<TextInput>(null);
   const examInputRef = useRef<TextInput>(null);
@@ -160,17 +162,72 @@ export default function ChatScreen() {
     setExamInput(prev => prev.slice(0, -1));
   }
 
-  function openExam() {
-    if (!currentSubject) return;
-    const qs = getSubjectExamQuestions(currentSubject);
-    setExamQuestions(qs);
+  async function openExam() {
+    if (!currentSubject || examLoading) return;
+    setExamLoading(true);
+    setExamModalVisible(true);
+    setExamPhase("answering");
     setExamIndex(0);
     setExamInput("");
     setExamResults([]);
     setExamFeedback("none");
-    setExamPhase("answering");
-    setExamModalVisible(true);
+    setExamQuestions([]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const history: ChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }));
+      const qs = await generateExamQuestions(currentSubject, history, 4);
+      setExamQuestions(qs.length > 0 ? qs : getSubjectExamQuestions(currentSubject));
+    } catch {
+      setExamQuestions(getSubjectExamQuestions(currentSubject));
+    } finally {
+      setExamLoading(false);
+    }
+  }
+
+  // Cierra el examen y le pasa la pregunta fallida al tutor para que la explique
+  function askTutorAboutCurrentQuestion() {
+    const q = examQuestions[examIndex];
+    if (!q) return;
+    setExamModalVisible(false);
+    Haptics.selectionAsync();
+    const askMsg: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: `En el examen me equivoqué con esta pregunta: "${q.question}". ¿Me la puedes explicar paso a paso?`,
+    };
+    setMessages(prev => [...prev, askMsg]);
+
+    const asstId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, { id: asstId, role: "assistant", content: "", streaming: true }]);
+    setLoading(true);
+
+    const history: ChatMessage[] = [...messages, askMsg].map(m => ({ role: m.role, content: m.content }));
+    const ctx = {
+      ...getUsageContext(),
+      current_subject: currentSubject,
+      subject_turn_count: subjectTurnCount,
+      exam_question: q.question,
+      exam_correct_answer: q.correctAnswer,
+    };
+
+    streamChat(
+      askMsg.content,
+      history,
+      ctx,
+      (chunk) => {
+        setMessages(prev => prev.map(m => m.id === asstId ? { ...m, content: m.content + chunk } : m));
+        setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 50);
+      },
+      () => {
+        setMessages(prev => prev.map(m => m.id === asstId ? { ...m, streaming: false } : m));
+        setLoading(false);
+      },
+    ).catch(() => {
+      setMessages(prev => prev.map(m => m.id === asstId
+        ? { ...m, content: "No pude conectarme. Revisa tu conexión.", streaming: false }
+        : m));
+      setLoading(false);
+    });
   }
 
   function submitExamAnswer() {
@@ -641,13 +698,24 @@ export default function ChatScreen() {
                 Examen final — {currentSubject}
               </Text>
               <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
-                {examPhase === "answering"
-                  ? `Pregunta ${examIndex + 1} de ${examQuestions.length}. Debes responder TODAS correctamente.`
-                  : "Resultado del examen"}
+                {examLoading
+                  ? "Generando preguntas según lo que estudiaste..."
+                  : examPhase === "answering"
+                    ? `Pregunta ${examIndex + 1} de ${examQuestions.length}. Debes responder TODAS correctamente.`
+                    : "Resultado del examen"}
               </Text>
             </View>
 
-            {examPhase === "answering" && examQuestions[examIndex] && (
+            {examLoading && (
+              <View style={[styles.questionBox, { backgroundColor: colors.muted, alignItems: "center" }]}>
+                <Feather name="loader" size={20} color={colors.mutedForeground} />
+                <Text style={{ color: colors.mutedForeground, marginTop: 8, fontSize: 13 }}>
+                  Preparando tu examen…
+                </Text>
+              </View>
+            )}
+
+            {!examLoading && examPhase === "answering" && examQuestions[examIndex] && (
               <>
                 <View style={[styles.questionBox, { backgroundColor: colors.muted }]}>
                   <Text style={[styles.questionText, { color: colors.foreground }]}>
@@ -682,12 +750,23 @@ export default function ChatScreen() {
                   </View>
                 )}
                 {examFeedback === "wrong" && (
-                  <View style={[styles.resultBanner, { backgroundColor: colors.destructive + "18" }]}>
-                    <Feather name="x-circle" size={16} color={colors.destructive} />
-                    <Text style={[styles.resultText, { color: colors.destructive }]}>
-                      Incorrecto. Respuesta: {examQuestions[examIndex].correctAnswer}
-                    </Text>
-                  </View>
+                  <>
+                    <View style={[styles.resultBanner, { backgroundColor: colors.destructive + "18" }]}>
+                      <Feather name="x-circle" size={16} color={colors.destructive} />
+                      <Text style={[styles.resultText, { color: colors.destructive }]}>
+                        Incorrecto. Respuesta: {examQuestions[examIndex].correctAnswer}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={askTutorAboutCurrentQuestion}
+                      style={[styles.askTutorBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary }]}
+                    >
+                      <Feather name="help-circle" size={14} color={colors.primary} />
+                      <Text style={[styles.askTutorText, { color: colors.primary }]}>
+                        Pregúntale al tutor
+                      </Text>
+                    </TouchableOpacity>
+                  </>
                 )}
 
                 {isMathSubject(currentSubject) ? (
@@ -839,6 +918,11 @@ const styles = StyleSheet.create({
   challengeInput: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontFamily: "Inter_400Regular", borderWidth: 2 },
   resultBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 10 },
   resultText: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  askTutorBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, marginTop: 4,
+  },
+  askTutorText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   modalActions: { flexDirection: "row", gap: 10 },
   cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center" },
   cancelBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },

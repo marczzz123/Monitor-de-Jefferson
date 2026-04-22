@@ -373,6 +373,30 @@ export function getSubjectExamQuestions(subject: string): ExamQuestion[] {
   return pool.map(q => ({ question: q.q, correctAnswer: q.a }));
 }
 
+// Genera el examen final desde el servidor de IA, basado en lo que efectivamente se hablo en el chat.
+export async function generateExamQuestions(
+  subject: string,
+  history: ChatMessage[],
+  count: number = 4,
+): Promise<ExamQuestion[]> {
+  try {
+    const res = await fetch(`${BASE}/api/ai/exam`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, history, count }),
+    });
+    if (!res.ok) throw new Error("exam fetch failed");
+    const data = await res.json();
+    if (!Array.isArray(data?.questions) || data.questions.length === 0) throw new Error("empty");
+    return data.questions
+      .filter((q: any) => q && typeof q.question === "string" && typeof q.correctAnswer === "string")
+      .map((q: any) => ({ question: q.question, correctAnswer: String(q.correctAnswer) }));
+  } catch {
+    // Fallback: banco local fijo de la materia
+    return getSubjectExamQuestions(subject);
+  }
+}
+
 export function checkExamAnswer(correctAnswer: string, userAnswer: string): boolean {
   return checkNightChallengeAnswer(correctAnswer, userAnswer);
 }
